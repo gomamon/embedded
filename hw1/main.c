@@ -3,6 +3,8 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <dirent.h>
+#include <string.h>
+#include <stdlib.h>
 #include <linux/input.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -29,8 +31,7 @@
 
 #define SHARED_KEY1 (key_t) 0x10
 #define SHARED_KEY2 (key_t) 0x15
-#define SHARED_KEY3 (key_t) 0x20
-#define SEM_KEY (key_t) 0x25 //semaphore key
+#define SEM_KEY (key_t) 0x20 //semaphore key
 #define IFLAGS (IPC_CREAT)
 #define ERR ((struct databuf *)-1)
 #define SIZE 2048
@@ -39,77 +40,36 @@
 struct sembuf p1 = {0, -1, SEM_UNDO }, p2 = {1, -1, SEM_UNDO}, p3 = {2, -1, SEM_UNDO};
 struct sembuf v1 = {0, 1, SEM_UNDO }, v2 = {1, 1, SEM_UNDO }, v3 = {2,1,SEM_UNDO};
 
+typedef union {
+	int val;
+	struct semid_ds *buf;
+	unsigned short * array;
+} semun;
+
 struct databuf {
 	int d_nread;
 	char d_buf[SIZE];
 };
 
-static int shm_id1, shm_id2, shm_id3, sem_id;
-/*
-   int input(){
+static int shm_id1, shm_id2, sem_id;
 
-   struct input_event ev[BUFF_SIZE];
-   int fd, rd, value, size = sizeof (struct input_event);
-   char name[256] = "Unknown";
-   int mode = 1;
-
-   char* device = "/dev/input/event0";
-   if((fd  = open(device, O_RDONLY|O_NONBLOCK)) == -1){
-   printf("%s is not a vaild device \\n", device);
-   }
-
-// ioctl (fd, EVIOCGNAME (sizeof (name)), name);
-// printf ("Reading From : %s (%s)n", device, name);
-
-while (1){
-if ((rd = read (fd, ev, size * BUFF_SIZE)) < size)
-{
-//		printf("read()");  
-}
-
-value = ev[0].value;
-
-if (value != ' ' && ev[1].value == 1 && ev[1].type == 1){
-printf ("code%d\n", (ev[1].code));
-}
-else	if( value == KEY_PRESS ) {
-printf ("key press code[%d]\n",ev[0].code);
-switch(ev[0].code){
-case 115: 
-printf("vol-\n");
-break;
-case 114:
-printf("vol+\n");
-break;
-case 158:
-printf("exit\n");
-return 0;
-break;
-}
-
-}
-//printf ("Type[%d] Value[%d] Code[%d]\n", ev[0].type, ev[0].value, (ev[0].code));
-}
-
-}
-}
- */
-
-void getseg(struct databuf **p1, struct databuff **p2){
-	if((shm_id1 = shmget(SHARED_KEY1, sizeof(struct databuf), 0600 | IFLAGS)) == -1){
+void getseg(struct databuf **p1, struct databuf **p2){ // init
+	/*create shared mem*/
+	if((shm_id1 = shmget(SHARED_KEY1, sizeof(struct databuf), 0600 | IFLAGS)) == -1){	
 		perror("error shmget\n");
 		exit(1);
 	}
 
-	if((shm_id2 = shmget(SHARED_KEY2, sizeof(struct databuf), 0600 | IFLAGS)) == -1){
+	if((shm_id2 = shmget(SHARED_KEY2, sizeof(struct databuf), 0600 | IFLAGS)) == -1){	
 		perror("error shmget\n");
 		exit(1);
 	}
-	if((shm_id3 = shmget(SHARED_KEY3, sizeof(struct databuf), 0600 | IFLAGS)) == -1){
-		perror("error shmget\n");
-		exit(1);
-	}
+	// if((shm_id3 = shmget(SHARED_KEY3, sizeof(struct databuf), 0600 | IFLAGS)) == -1){ 
+	// 	perror("error shmget\n");
+	// 	exit(1);
+	// }
 
+	/* attach shared mem to process */
 	if((*p1 = (struct databuf*)shmat(shm_id1, 0, 0))==ERR){
 		perror("error shmget\n");
 		exit(1);	
@@ -118,10 +78,13 @@ void getseg(struct databuf **p1, struct databuff **p2){
 		perror("error shmget\n");
 		exit(1);
 	}
-	if((*p3 = (struct databuf*)shmat(shm_id3, 0, 0))==ERR){
-		perror("error shmget\n");
-		exit(1);
-	}
+
+	// if((*p3 = (struct databuf*)shmat(shm_id3, 0, 0))==ERR){
+	// 	perror("error shmget\n");
+	// 	exit(1);
+	// }
+
+	puts("getseg!!");
 }
 
 int getsem(){
@@ -129,42 +92,90 @@ int getsem(){
 	x.val = 0;
 	int id = -1;
 
-	if ((id = semget (SEM_KEY, 2, 0600 | IFLAGS ) == -1)) exit(1);
-	if (semctl (id, 0, SETVAL, x) == -1)				exit(1);
-	if (semctl (id, 1, SETVAL, x) == -1)				exit(1);
-	if (semctl (id, 2, SETVAL, x) == -1)				exit(1);
+	puts("start getsem!!");
+	if ((id = semget (SEM_KEY, 3, IPC_CREAT)) == -1){
+		puts("getsem1!!");
+		exit(1);	//?
+	} 
 
+	if (semctl (id, 0, SETVAL, x) == -1){					// set semaphore
+		puts("getsem2!!");
+		exit(1);
+	}
+
+	if (semctl (id, 1, SETVAL, x) == -1){			
+		puts("getsem3!!");
+		exit(1);	
+	}
+
+	if (semctl (id, 2, SETVAL, x) == -1){				
+		puts("getsem4!!");
+		exit(1);
+	}
+
+	puts("end getsem!!");
 	return (id);
 }
 
 void remobj(){
+
+	/* remove shm */
 	if (shmctl(shm_id1, IPC_RMID, 0) == -1) exit(1);
 	if (shmctl(shm_id2, IPC_RMID, 0) == -1) exit(1);
-	if (shmctl(shm_id3, IPC_RMID, 0) == -1) exit(1);	 //delete shared mem
+
+	/* remove semaphore */
 	if (semctl(sem_id, 0, IPC_RMID, 0) == -1) exit(1);
 }
 
 
-int glob = 6;
+void proc_in(int semid, struct databuf *buf1){
+	/* input process */
+	while(1){
+		printf("read!\n");
+		buf1 -> d_nread = read(0, buf1 -> d_buf, SIZE); 
+		semop(semid, &v1, 1);
+		semop(semid, &p3, 1);
 
+		if (buf1 -> d_nread <= 0) return;
 
-void proc_in(){
-
-
+	}
 }
-void proc_out(){
 
+
+void proc_main(int semid, struct databuf *buf1, struct databuf *buf2){
+	/* main process */
+
+	while(1){
+		semop(semid, &p1, 1);
+		semop(semid, &v2,1);
+		if(buf1 -> d_nread <= 0)
+			return;
+		printf("main!");
+		write(1, buf1->d_buf, buf1->d_nread);
+		printf("\n");
+		char tmp[4] = "ddo\0";
+		strcpy(buf2->d_buf, tmp);
+		buf2->d_nread = strlen(tmp);
+	}
 }
 
-void proc_main(){
+void proc_out(int semid, struct databuf *buf2){
+	/* output process */
 
+	while(1){
+		semop(semid, &p2, 1);
+		semop(semid, &v3,1);
+		write(1, buf2->d_buf, buf2->d_nread);
+	}
 }
 
 int main (int argc, char *argv[])
 {
 
 	pid_t pid_in =0 , pid_out=0;
-	struct databuf *buf1, *buf2, *buf3;
+	struct databuf *buf1, *buf2;
+
+	puts("START!");
 
 	sem_id = getsem(); //creat and init semaphore
 	getseg (&buf1, &buf2);	//create and attach shared mem 
@@ -176,7 +187,8 @@ int main (int argc, char *argv[])
 			break;
 		case 0:
 			printf("input process\n");
-			proc_in();
+			proc_in(sem_id, buf1); 	//in -> main
+			remobj();
 			break;
 		default:
 			switch(pid_out = fork()){
@@ -184,11 +196,12 @@ int main (int argc, char *argv[])
 					perror("ERROR: fork()");
 					break;
 				case 0:
-					printf("output process\n")
-					proc_out();
+					printf("output process\n");
+					proc_out(sem_id, buf2); // main -> out
+					remobj();
 					break;
 				default:
-					proc_main();
+					proc_main(sem_id, buf1, buf2); // in -> main -> out
 					break;
 			}
 			break;

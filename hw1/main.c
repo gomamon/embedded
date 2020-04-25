@@ -30,7 +30,8 @@
 #include "main.h"
 
 #define SHARED_KEY1 (key_t) 0x10
-#define SHARED_KEY2 (key_t) 0x15
+#define SHARED_KEY2 (key_t) 0x11
+#define SHARED_KEY3 (key_t) 0x12
 #define SEM_KEY (key_t) 0x20 //semaphore key
 #define IFLAGS (IPC_CREAT)
 #define ERR ((struct databuf *)-1)
@@ -51,38 +52,38 @@ struct databuf {
 	char d_buf[SIZE];
 };
 
-static int shm_id1, shm_id2, sem_id;
+static int shm_key, shm_mode, shm_status, sem_id;
 
-void getseg(struct databuf **p1, struct databuf **p2){ // init
+void getseg(struct databuf **p1, struct databuf **p2, struct databuf **p3){ // init
 	/*create shared mem*/
-	if((shm_id1 = shmget(SHARED_KEY1, sizeof(struct databuf), 0600 | IFLAGS)) == -1){	
+	if((shm_key = shmget(SHARED_KEY1, sizeof(struct databuf), 0600 | IFLAGS)) == -1){	
 		perror("error shmget\n");
 		exit(1);
 	}
 
-	if((shm_id2 = shmget(SHARED_KEY2, sizeof(struct databuf), 0600 | IFLAGS)) == -1){	
+	if((shm_mode = shmget(SHARED_KEY2, sizeof(struct databuf), 0600 | IFLAGS)) == -1){	
 		perror("error shmget\n");
 		exit(1);
 	}
-	// if((shm_id3 = shmget(SHARED_KEY3, sizeof(struct databuf), 0600 | IFLAGS)) == -1){ 
-	// 	perror("error shmget\n");
-	// 	exit(1);
-	// }
+	if((shm_status = shmget(SHARED_KEY3, sizeof(struct databuf), 0600 | IFLAGS)) == -1){ 
+		perror("error shmget\n");
+		exit(1);
+	}
 
 	/* attach shared mem to process */
-	if((*p1 = (struct databuf*)shmat(shm_id1, 0, 0))==ERR){
+	if((*p1 = (struct databuf*)shmat(shm_key, 0, 0))==ERR){
 		perror("error shmget\n");
 		exit(1);	
 	}
-	if((*p2 = (struct databuf*)shmat(shm_id2, 0, 0))==ERR){
+	if((*p2 = (struct databuf*)shmat(shm_mode, 0, 0))==ERR){
 		perror("error shmget\n");
 		exit(1);
 	}
 
-	// if((*p3 = (struct databuf*)shmat(shm_id3, 0, 0))==ERR){
-	// 	perror("error shmget\n");
-	// 	exit(1);
-	// }
+	if((*p3 = (struct databuf*)shmat(shm_status, 0, 0))==ERR){
+		perror("error shmget\n");
+		exit(1);
+	}
 
 	puts("getseg!!");
 }
@@ -120,52 +121,58 @@ int getsem(){
 void remobj(){
 
 	/* remove shm */
-	if (shmctl(shm_id1, IPC_RMID, 0) == -1) exit(1);
-	if (shmctl(shm_id2, IPC_RMID, 0) == -1) exit(1);
+	if (shmctl(shm_key, IPC_RMID, 0) == -1) exit(1);
+	if (shmctl(shm_mode, IPC_RMID, 0) == -1) exit(1);
+	if (shmctl(shm_status, IPC_RMID, 0) == -1) exit(1);
 
 	/* remove semaphore */
 	if (semctl(sem_id, 0, IPC_RMID, 0) == -1) exit(1);
 }
 
 
-void proc_in(int semid, struct databuf *buf1){
+void proc_in(int semid, struct databuf *buf_key){
 	/* input process */
 	while(1){
 		printf("read!\n");
-		buf1 -> d_nread = read(0, buf1 -> d_buf, SIZE); 
+		buf_key -> d_nread = read(0, buf_key -> d_buf, SIZE); 
 		semop(semid, &v1, 1);
 		semop(semid, &p3, 1);
 
-		if (buf1 -> d_nread <= 0) return;
+		if (buf_key -> d_nread <= 0) return;
 
 	}
 }
 
 
-void proc_main(int semid, struct databuf *buf1, struct databuf *buf2){
+void proc_main(int semid, struct databuf *buf_key, struct databuf *buf_mode, struct databuf *buf_status){
 	/* main process */
 
 	while(1){
 		semop(semid, &p1, 1);
 		semop(semid, &v2,1);
-		if(buf1 -> d_nread <= 0)
+		if(buf_key -> d_nread <= 0)
 			return;
 		printf("main!");
-		write(1, buf1->d_buf, buf1->d_nread);
+		write(1, buf_key->d_buf, buf_key->d_nread);
 		printf("\n");
 		char tmp[4] = "ddo\0";
-		strcpy(buf2->d_buf, tmp);
-		buf2->d_nread = strlen(tmp);
-	}
+		strcpy(buf_mode->d_buf, tmp);
+		buf_mode->d_nread = strlen(tmp);
+		char tmp2[4] = "out\0";
+		strcpy(buf_status->d_buf, tmp2);
+		buf_status->d_nread = strlen(tmp2);
+
+	}	
 }
 
-void proc_out(int semid, struct databuf *buf2){
+void proc_out(int semid, struct databuf *buf_mode, struct databuf *buf_status){
 	/* output process */
 
 	while(1){
 		semop(semid, &p2, 1);
 		semop(semid, &v3,1);
-		write(1, buf2->d_buf, buf2->d_nread);
+		write(1, buf_mode->d_buf, buf_mode->d_nread);
+		write(1, buf_status->d_buf, buf_status->d_nread);
 	}
 }
 
@@ -173,12 +180,12 @@ int main (int argc, char *argv[])
 {
 
 	pid_t pid_in =0 , pid_out=0;
-	struct databuf *buf1, *buf2;
+	struct databuf *buf_key, *buf_mode, *buf_status;
 
 	puts("START!");
 
 	sem_id = getsem(); //creat and init semaphore
-	getseg (&buf1, &buf2);	//create and attach shared mem 
+	getseg (&buf_key, &buf_mode, &buf_status);	//create and attach shared mem 
 	
 	/* create child processes */
 	switch(pid_in = fork()){
@@ -187,7 +194,7 @@ int main (int argc, char *argv[])
 			break;
 		case 0:
 			printf("input process\n");
-			proc_in(sem_id, buf1); 	//in -> main
+			proc_in(sem_id, buf_key); 	//in -> main
 			remobj();
 			break;
 		default:
@@ -197,11 +204,11 @@ int main (int argc, char *argv[])
 					break;
 				case 0:
 					printf("output process\n");
-					proc_out(sem_id, buf2); // main -> out
+					proc_out(sem_id, buf_mode, buf_status); // main -> out
 					remobj();
 					break;
 				default:
-					proc_main(sem_id, buf1, buf2); // in -> main -> out
+					proc_main(sem_id, buf_key, buf_mode, buf_status); // in -> main -> out
 					break;
 			}
 			break;

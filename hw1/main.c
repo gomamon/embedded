@@ -1,72 +1,12 @@
-#include <unistd.h> // for fork
-
-#include <errno.h>
-#include <fcntl.h>
-#include <dirent.h>
-#include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <sys/ioctl.h>
-#include <linux/input.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/select.h>
-#include <sys/time.h>
-#include <termios.h>
-#include <signal.h>
-#include <stdio.h>
-
-#include <sys/types.h>
-#include <sys/ipc.h>
-#include <sys/msg.h>	//message queue
-
-#include <sys/shm.h>	//shared mem
-#include <sys/sem.h>	//semaphore
-
-#define BUFF_SIZE 64
-
-#define KEY_RELEASE 0
-#define KEY_PRESS 1
-
-
 #include "main.h"
-
-#define SHARED_KEY1 (key_t) 0x10
-#define SHARED_KEY2 (key_t) 0x11
-#define SHARED_KEY3 (key_t) 0x12
-#define SEM_KEY (key_t) 0x20 //semaphore key
-#define IFLAGS (IPC_CREAT)
-#define ERR ((struct databuf *)-1)
-#define ERR_INT ((int *)-1)
-#define SIZE 2048
-
-#define KEY_VOL_DOWN 114
-#define KEY_VOL_UP 115
-#define KEY_BACK 158
-
-#define MAX_BUTTON 9
-
-#define MODE_NUM 4
+#include "clock.h"
+#include "devices.h"
 
 struct sembuf p1 = {0, -1, SEM_UNDO }, p2 = {1, -1, SEM_UNDO}, p3 = {2, -1, SEM_UNDO};
 struct sembuf v1 = {0, 1, SEM_UNDO }, v2 = {1, 1, SEM_UNDO }, v3 = {2,1,SEM_UNDO};
-
-typedef union {
-	int val;
-	struct semid_ds *buf;
-	unsigned short * array;
-} semun;
-
-
-struct databuf {
-	int d_nread;
-	char d_buf[SIZE];
-};
-
-
 static int shm_key, shm_mode, shm_status, sem_id;
 
-void getseg(int **p1, int **p2, struct databuf **p3){ // init
+void getseg(int **p1, int **p2, int **p3, struct databuf **p4){ // init
 	/*create shared mem*/
 	if((shm_key = shmget(SHARED_KEY1, sizeof(int), 0600 | IFLAGS)) == -1){	
 		perror("error shmget\n");
@@ -77,7 +17,11 @@ void getseg(int **p1, int **p2, struct databuf **p3){ // init
 		perror("error shmget\n");
 		exit(1);
 	}
-	if((shm_status = shmget(SHARED_KEY3, sizeof(struct databuf), 0600 | IFLAGS)) == -1){ 
+	if((shm_status = shmget(SHARED_KEY3, sizeof(int), 0600 | IFLAGS)) == -1){ 
+		perror("error shmget\n");
+		exit(1);
+	}
+	if((shm_status = shmget(SHARED_KEY4, sizeof(struct databuf), 0600 | IFLAGS)) == -1){ 
 		perror("error shmget\n");
 		exit(1);
 	}
@@ -92,7 +36,11 @@ void getseg(int **p1, int **p2, struct databuf **p3){ // init
 		exit(1);
 	}
 
-	if((*p3 = (struct databuf*)shmat(shm_status, 0, 0))==ERR){
+	if((*p3 = (int*)shmat(shm_status, 0, 0))==ERR_INT){
+		perror("error shmget\n");
+		exit(1);
+	}
+	if((*p4 = (struct databuf*)shmat(shm_status, 0, 0))==ERR){
 		perror("error shmget\n");
 		exit(1);
 	}
@@ -160,10 +108,10 @@ void proc_in(int semid, int *buf_in){
 		printf("%s is not a vaild device \n", dev_sw);
 		close(fd_sw);
 	}
-
+	int flag = 0;
 	size_sw = sizeof(push_sw_buff);
 	while(1){
-		int flag= 0;
+	//	puts("read\n");
 		usleep(350000);
 		if((rd = read(fd_key, ev, size * BUFF_SIZE)) >= size){
 			value = ev[0].value;
@@ -172,9 +120,9 @@ void proc_in(int semid, int *buf_in){
 					case KEY_VOL_UP:
 					case KEY_VOL_DOWN:
 					case KEY_BACK:
-						flag  = 1;
 					//	printf("READ code: %d\n",ev[0].code);
-						*buf_in = ev[0].code;
+						*buf_in = (ev[0].code) * 10;
+						flag = 1;
 						break;
 				}
 			}
@@ -182,78 +130,116 @@ void proc_in(int semid, int *buf_in){
 		else{
 			read(fd_sw, &push_sw_buff, size_sw);
 			for( i=0; i<MAX_BUTTON;i++){
+				*buf_in <<= 1;
 				if(push_sw_buff[i] == 1){
-				//	printf("READ switch: %d\n",push_sw_buff[i]);
-					*buf_in = i;
-					flag = 1;
-					break;
+					*buf_in += 1;
+					flag= 1;
 				} 
 			}
 		}
 		if(flag == 1){
-			semop(semid, &v1, 1);
-			semop(semid, &p3, 1);
+			printf("wait %d\n", *buf_in);
+			semop(semid, &p1, 1);
+			printf("release! %d\n", *buf_in);
 			flag = 0;
 		}
-
-
 	}
 }
 
 
-void proc_main(int semid, int *buf_in, int *buf_mode, struct databuf *buf_status){
+void proc_main(int semid, int *buf_in, int *buf_mode, int *buf_data1, struct databuf *buf_data2){
 	/* main process */
+	int sw = SW1;
+	int inflag = 0;
+
+	// time_t rawtime;
+	// struct tm *timeinfo;
 
 	while(1){
-		semop(semid, &p1, 1);
+		inflag = 1;
 
-		printf("main! %d", *buf_in);
+		// printf("main! %d", *buf_in);
 		
 		switch(*buf_in){
-			case KEY_VOL_DOWN:
+			case (KEY_VOL_DOWN*10):
 				*buf_mode = (*buf_mode>1)? *buf_mode-1 : 4;
+				sw = 1 << 9;
 				break;
-			case KEY_VOL_UP:
+			case (KEY_VOL_UP*10):
 				*buf_mode = (*buf_mode<4)? *buf_mode+1 : 1;
+				sw = 1<<9;
 				break;
-			case KEY_BACK:
+			case (KEY_BACK*10):
 				*buf_mode = 0;
+				sw = 1<<9;
+				break;
+			case 0 :
+				inflag = 0;
+				break;
 			default:
-				printf("main switch: %d\n",*buf_in);
+				sw = *buf_in;
+				printf("SW: %d\n",sw);
+				// printf("main switch: %d\n",*buf_in);
+				break;
 		}
-
+		switch(*buf_mode){
+			case 1:
+				mode_clock(sw, *buf_in,&buf_data1, &buf_data2);
+				break;
+			case 2:
+			case 3:
+			case 4:
+				break;
+		}
+		//printf("time! %02d: %02d\n", tm->tm_hour, tm->tm_min);
 		char tmp[4] = "out\0";
-		strcpy(buf_status->d_buf, tmp);
-		buf_status->d_nread = strlen(tmp);
 
-		semop(semid, &v2,1);
+		*buf_in = 0;
+		semop(semid, &p2,1);
+		
+		if(inflag == 1)
+			semop(semid, &v1, 1);
+		// strcpy(buf_data1->d_buf, tmp);
+		// buf_data1->d_nread = strlen(tmp);
+
 	}	
 }
 
-void proc_out(int semid, int *buf_mode, struct databuf *buf_status){
+void proc_out(int semid, int *buf_mode, int *buf_data1, struct databuf *buf_data2){
 	/* output process */
-
+	char *tmp;
 	while(1){
-		semop(semid, &p2, 1);
-	
-		printf("Out %d", *buf_mode);
-		write(1, buf_status->d_buf, buf_status->d_nread);
-		printf("\n");
-		semop(semid, &v3,1);
+		
+		switch(*buf_mode){
+			case 1:
+				//sprintf(tmp,"%d",*buf_data1);
+				led(*buf_data1);
+				fnd(buf_data2->d_buf);
+				break;
+			default:
+				break;
+		}
+		semop(semid, &v2, 1);
 	}
+}
+
+init_buf(int *buf_in, int *buf_mode, int* buf_data1, struct databuf* buf_data2){
+	*buf_mode = 1;
+	*buf_data1 = 1;
+	*buf_in = 0;
 }
 
 int main (int argc, char *argv[])
 {
 
 	pid_t pid_in =0 , pid_out=0;
-	struct databuf *buf_status;
-	int *buf_in, *buf_mode;
+	struct databuf *buf_data2;
+	int *buf_in, *buf_mode, *buf_data1;
 	puts("START!");
 
 	sem_id = getsem(); //creat and init semaphore
-	getseg (&buf_in, &buf_mode, &buf_status);	//create and attach shared mem 
-	
+	getseg (&buf_in, &buf_mode, &buf_data1, &buf_data2);	//create and attach shared mem 
+	init_buf(buf_in, buf_mode, buf_data1, buf_data2);
 	/* create child processes */
 	switch(pid_in = fork()){
 		case -1:
@@ -271,11 +257,11 @@ int main (int argc, char *argv[])
 					break;
 				case 0:
 					printf("output process\n");
-					proc_out(sem_id, buf_mode, buf_status); // main -> out
+					proc_out(sem_id, buf_mode, buf_data1, buf_data2); // main -> out
 					remobj();
 					break;
 				default:
-					proc_main(sem_id, buf_in, buf_mode, buf_status); // in -> main -> out
+					proc_main(sem_id, buf_in, buf_mode, buf_data1, buf_data2); // in -> main -> out
 					break;
 			}
 			break;

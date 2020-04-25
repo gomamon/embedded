@@ -140,35 +140,39 @@ void remobj(){
 void proc_in(int semid, int *buf_key){
 	/* input process */
 
-	// struct input_event ev[BUFF_SIZE];
-    // int fd, rd, value, size = sizeof(struct input_event);
+	struct input_event ev[BUFF_SIZE];
+    int fd, rd, value, size = sizeof(struct input_event);
     
-	// char *device = "/dev/input/event0";
-    // if ((fd = open(device, O_RDONLY | O_NONBLOCK)) == -1) {
-    //     printf("%s is not a vaild device \\n", device);
-    // }
+	char *device = "/dev/input/event0";
+    if ((fd = open(device, O_RDONLY | O_NONBLOCK)) == -1) {
+        printf("%s is not a vaild device \\n", device);
+    }
 
 	while(1){
-		*buf_key = 0;
-		// if((rd = read(fd, ev, size * BUFF_SIZE)) >= size){
-		// 	value = ev[0].value;
-		// 	if(value == KEY_PRESS){
-		// 		switch(ev[0].code){
-		// 			case KEY_VOL_UP:
-		// 			case KEY_VOL_DOWN:
-		// 			case KEY_BACK:
-		// 				printf("code: %d",ev[0].code);
-		// 				*buf_key = ev[0].code;
-		// 				break;
-		// 		}
-		// 	}
-		// }
-		int tmp;
-		scanf("%d",buf_key);
-		printf("READ : %d\n",(*buf_key));
-		semop(semid, &v1, 1);
-		semop(semid, &p3, 1);
-		if(*buf_key == 0) return;
+		int flag= 0;
+		if((rd = read(fd, ev, size * BUFF_SIZE)) >= size){
+			value = ev[0].value;
+			if(value == KEY_PRESS){
+				switch(ev[0].code){
+					case KEY_VOL_UP:
+					case KEY_VOL_DOWN:
+					case KEY_BACK:
+						flag  = 1;
+						printf("READ code: %d\n",ev[0].code);
+						*buf_key = ev[0].code;
+						break;
+				}
+			}
+		}
+
+	//	scanf("%d",buf_key);
+
+		if(flag == 1){
+			semop(semid, &v1, 1);
+			semop(semid, &p3, 1);
+			flag = 0;
+		}
+
 
 	}
 }
@@ -179,16 +183,17 @@ void proc_main(int semid, int *buf_key, struct databuf *buf_mode, struct databuf
 
 	while(1){
 		semop(semid, &p1, 1);
-		semop(semid, &v2,1);
 
 		printf("main! %d", *buf_key);
-		// write(1, buf_key.d_val, sizeof(buf_key->d_val));
 		char tmp[4] = "ddo\0";
 		strcpy(buf_mode->d_buf, tmp);
 		buf_mode->d_nread = strlen(tmp);
 		char tmp2[4] = "out\0";
 		strcpy(buf_status->d_buf, tmp2);
 		buf_status->d_nread = strlen(tmp2);
+
+		semop(semid, &v2,1);
+
 
 	}	
 }
@@ -198,10 +203,12 @@ void proc_out(int semid, struct databuf *buf_mode, struct databuf *buf_status){
 
 	while(1){
 		semop(semid, &p2, 1);
-		semop(semid, &v3,1);
+		
 		if(buf_mode->d_nread <= 0) return;
 		write(1, buf_mode->d_buf, buf_mode->d_nread);
 		write(1, buf_status->d_buf, buf_status->d_nread);
+
+		semop(semid, &v3,1);
 	}
 }
 

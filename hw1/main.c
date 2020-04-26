@@ -217,6 +217,8 @@ void proc_out(int semid, int *buf_mode, int *buf_data1, struct databuf *buf_data
 	/* output process */
 	char *tmp;
 	while(1){
+		char nullstr[16];
+		memset(nullstr, 0, 16);
 		// int test1 = 8;
 		// char *test2 = "3332\0";
 		// char *test3 = "hola\nyoyo\0";
@@ -227,18 +229,21 @@ void proc_out(int semid, int *buf_mode, int *buf_data1, struct databuf *buf_data
 		// dot_matrix(test1);
 		// text_lcd(test3);
 
-		sleep(1);
-			switch(*buf_mode){
-				case 1:
-					printf("CLOCK OUT: %d %s\n",*buf_data1, buf_data2->d_buf);
-					led(*buf_data1);
-					fnd(buf_data2->d_buf);
-					break;
-				default:
-					break;
-			}
+		
+		switch(*buf_mode){
+			case 1:
+				printf("CLOCK OUT: %d %s\n",*buf_data1, buf_data2->d_buf);
+				led(*buf_data1);
+				fnd(buf_data2->d_buf);
+				dot_matrix(-1);
+				text_lcd(nullstr);
+				break;
+			default:
+				break;
+		}
 		
 		semop(semid, &v2, 1);
+		sleep(1);
 	}
 }
 

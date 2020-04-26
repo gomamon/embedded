@@ -147,14 +147,12 @@ void dot_matrix(int data)
     /*
 	write(dev,fpga_set_full,sizeof(fpga_set_full));
 	sleep(1);
+	*/
+	if(data < 0)
+		write(dev,fpga_set_blank,sizeof(fpga_set_blank));
 
-	write(dev,fpga_set_blank,sizeof(fpga_set_blank));
-	sleep(1);
-    */
-
-	write(dev,fpga_number[data],str_size);	
-
-
+	else
+		write(dev,fpga_number[data],str_size);	
 	close(dev);
 	
 	return;
@@ -175,10 +173,10 @@ void text_lcd(char *str_data)
 	int tok_size = strlen(str_data);
 
 	printf("text_lcd: %s\n",str_data);
-	memset(string,0,sizeof(string));	
+	memset(string,' ',sizeof(string));	
 		
 	for(i=0; i<sizeof(str_data); i++){
-		if(str_data[i] == '\n');
+		if(str_data[i] == '\n' || str_data[i] == 0);
 			tok_size = i;
 	}
 
@@ -188,28 +186,18 @@ void text_lcd(char *str_data)
 		exit(1);
 	}
 
-	// str_size=strlen(data[0]);
-	// if(str_size>0) {
-	// 	strncat(string,data[0],str_size);
-	// 	memset(string+str_size,' ',LINE_BUFF-str_size);
-	// }
 	if(tok_size>0){
 		strncat(string, str_data, tok_size);
 		memset(string+tok_size, ' ', LINE_BUFF-tok_size);
 	}
-	
+
 	if(tok_size<strlen(str_data)){
 		int tok2_idx = tok_size+2;
 		int tok2_size = strlen(str_data+tok2_idx);		
 		strncat(string,str_data+tok2_idx, tok2_size);
 		memset(string+LINE_BUFF+tok2_size, ' ', LINE_BUFF-tok2_size);
 	}
-	printf("string: %s\n",string);
-	// str_size=strlen(data[1]);
-	// if(str_size>0) {	
-	// 	strncat(string,data[1],str_size);
-	// 	memset(string+LINE_BUFF+str_size,' ',LINE_BUFF-str_size);
-	// }
+
 
 	write(dev,string,MAX_BUFF);		
 	close(dev);

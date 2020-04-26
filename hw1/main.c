@@ -4,7 +4,9 @@
 
 struct sembuf p1 = {0, -1, SEM_UNDO }, p2 = {1, -1, SEM_UNDO}, p3 = {2, -1, SEM_UNDO};
 struct sembuf v1 = {0, 1, SEM_UNDO }, v2 = {1, 1, SEM_UNDO }, v3 = {2,1,SEM_UNDO};
-static int shm_key, shm_mode, shm_status, sem_id;
+static int shm_key, shm_mode, shm_data1, shm_data2, sem_id;
+
+
 
 void getseg(int **p1, int **p2, int **p3, struct databuf **p4){ // init
 	/*create shared mem*/
@@ -17,11 +19,11 @@ void getseg(int **p1, int **p2, int **p3, struct databuf **p4){ // init
 		perror("error shmget\n");
 		exit(1);
 	}
-	if((shm_status = shmget(SHARED_KEY3, sizeof(int), 0600 | IFLAGS)) == -1){ 
+	if((shm_data1 = shmget(SHARED_KEY3, sizeof(int), 0600 | IFLAGS)) == -1){ 
 		perror("error shmget\n");
 		exit(1);
 	}
-	if((shm_status = shmget(SHARED_KEY4, sizeof(struct databuf), 0600 | IFLAGS)) == -1){ 
+	if((shm_data2 = shmget(SHARED_KEY4, sizeof(struct databuf), 0600 | IFLAGS)) == -1){ 
 		perror("error shmget\n");
 		exit(1);
 	}
@@ -36,11 +38,11 @@ void getseg(int **p1, int **p2, int **p3, struct databuf **p4){ // init
 		exit(1);
 	}
 
-	if((*p3 = (int*)shmat(shm_status, 0, 0))==ERR_INT){
+	if((*p3 = (int*)shmat(shm_data1, 0, 0))==ERR_INT){
 		perror("error shmget\n");
 		exit(1);
 	}
-	if((*p4 = (struct databuf*)shmat(shm_status, 0, 0))==ERR){
+	if((*p4 = (struct databuf*)shmat(shm_data2, 0, 0))==ERR){
 		perror("error shmget\n");
 		exit(1);
 	}
@@ -83,8 +85,8 @@ void remobj(){
 	/* remove shm */
 	if (shmctl(shm_key, IPC_RMID, 0) == -1) exit(1);
 	if (shmctl(shm_mode, IPC_RMID, 0) == -1) exit(1);
-	if (shmctl(shm_status, IPC_RMID, 0) == -1) exit(1);
-
+	if (shmctl(shm_data1, IPC_RMID, 0) == -1) exit(1);
+	if (shmctl(shm_data2, IPC_RMID, 0) == -1) exit(1);
 	/* remove semaphore */
 	if (semctl(sem_id, 0, IPC_RMID, 0) == -1) exit(1);
 }
@@ -111,7 +113,7 @@ void proc_in(int semid, int *buf_in){
 	int flag = 0;
 	size_sw = sizeof(push_sw_buff);
 	while(1){
-	//	puts("read\n");
+		printf("read %d\n", *buf_in);
 		usleep(350000);
 		if((rd = read(fd_key, ev, size * BUFF_SIZE)) >= size){
 			value = ev[0].value;
@@ -129,13 +131,15 @@ void proc_in(int semid, int *buf_in){
 		}
 		else{
 			read(fd_sw, &push_sw_buff, size_sw);
+			int btn=0;
 			for( i=0; i<MAX_BUTTON;i++){
-				*buf_in <<= 1;
+				btn <<= 1;
 				if(push_sw_buff[i] == 1){
-					*buf_in += 1;
+					btn += 1;
 					flag= 1;
 				} 
 			}
+			*buf_in = btn;
 		}
 		if(flag == 1){
 			printf("wait %d\n", *buf_in);
@@ -151,15 +155,20 @@ void proc_main(int semid, int *buf_in, int *buf_mode, int *buf_data1, struct dat
 	/* main process */
 	int sw = SW1;
 	int inflag = 0;
-
+	*buf_in = 0;
+	struct clock_data clock_info;
+	clock_info.clock_h =0;
+	clock_info.clock_m =0;
+	clock_info.clock_mode = 0;
 	// time_t rawtime;
-	// struct tm *timeinfo;
-
+	// struct tm *timeinfo
+	
+	
 	while(1){
 		inflag = 1;
 
 		// printf("main! %d", *buf_in);
-		
+		// printf("main: %d",*buf_in);
 		switch(*buf_in){
 			case (KEY_VOL_DOWN*10):
 				*buf_mode = (*buf_mode>1)? *buf_mode-1 : 4;
@@ -176,29 +185,28 @@ void proc_main(int semid, int *buf_in, int *buf_mode, int *buf_data1, struct dat
 			case 0 :
 				inflag = 0;
 				break;
-			default:
-				sw = *buf_in;
-				printf("SW: %d\n",sw);
-				// printf("main switch: %d\n",*buf_in);
-				break;
-		}
-		switch(*buf_mode){
-			case 1:
-				mode_clock(sw, *buf_in,&buf_data1, &buf_data2);
-				break;
-			case 2:
-			case 3:
-			case 4:
-				break;
-		}
-		//printf("time! %02d: %02d\n", tm->tm_hour, tm->tm_min);
+            default:
+                sw = *buf_in;
+                printf("sw: %d\n", sw);
+                break;
+        }
+        switch (*buf_mode) {
+            case 1:
+                mode_clock(sw, inflag, &(clock_info), buf_data1, buf_data2);
+                break;
+            case 2:
+            case 3:
+            case 4:
+                break;
+        }
+        //printf("time! %02d: %02d\n", tm->tm_hour, tm->tm_min);
 		char tmp[4] = "out\0";
 
 		*buf_in = 0;
 		semop(semid, &p2,1);
-		
-		if(inflag == 1)
+		if(inflag == 1){
 			semop(semid, &v1, 1);
+		}
 		// strcpy(buf_data1->d_buf, tmp);
 		// buf_data1->d_nread = strlen(tmp);
 
@@ -209,16 +217,27 @@ void proc_out(int semid, int *buf_mode, int *buf_data1, struct databuf *buf_data
 	/* output process */
 	char *tmp;
 	while(1){
+		// int test1 = 8;
+		// char *test2 = "3332\0";
+		// char *test3 = "hola\nyoyo\0";
+		// printf("test2:%s\n",test2);
+		// led(test1);	
+		// fnd(test2);
+		// printf("end fnd");
+		// dot_matrix(test1);
+		// text_lcd(test3);
+
+		sleep(1);
+			switch(*buf_mode){
+				case 1:
+					printf("CLOCK OUT: %d %s\n",*buf_data1, buf_data2->d_buf);
+					led(*buf_data1);
+					fnd(buf_data2->d_buf);
+					break;
+				default:
+					break;
+			}
 		
-		switch(*buf_mode){
-			case 1:
-				//sprintf(tmp,"%d",*buf_data1);
-				led(*buf_data1);
-				fnd(buf_data2->d_buf);
-				break;
-			default:
-				break;
-		}
 		semop(semid, &v2, 1);
 	}
 }
@@ -227,7 +246,7 @@ init_buf(int *buf_in, int *buf_mode, int* buf_data1, struct databuf* buf_data2){
 	*buf_mode = 1;
 	*buf_data1 = 1;
 	*buf_in = 0;
-}
+}	
 
 int main (int argc, char *argv[])
 {

@@ -1,5 +1,7 @@
-hw1_20161622: main.o clock.o devices.o
+default: main.o clock.o devices.o
 	arm-none-linux-gnueabi-gcc -static -o hw1_20161622 main.o clock.o devices.o
+push: default
+	adb push hw1_20161622 /data/local/tmp
 main.o: main.c main.h clock.h devices.h
 	arm-none-linux-gnueabi-gcc -c main.c -o main.o
 clock.o: clock.c main.h clock.h

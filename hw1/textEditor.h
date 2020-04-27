@@ -1,7 +1,11 @@
+
+#define TEXT_ENG_MODE 0
+#define TEXT_NUM_MODE 1
+
 struct text_editor_data {
 	int cnt;
-    int coor_x;
-    int coor_y;
-    int cursor_on;
+    int mode;
+    unsigned char text[9];    
+    int idx;
 };
 

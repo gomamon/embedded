@@ -55,6 +55,11 @@ void mode_clock(int sw, int inflag, struct clock_data *clock_info, struct outbuf
     }
     //save formatting string for time to buffer.
     sprintf(buf_out->fnd,"%02d%02d",(tm->tm_hour+clock_info->clock_h)%25,(tm->tm_min+clock_info->clock_m)%61);
+
+    /* dot_mat & text_led set empty*/
+    memset(buf_out->dot_matrix,0x00,MAX_DOT_MATRIX);
+    memset(buf_out->text_lcd, 0, MAX_TEXT_LCD);
+
     return;
 }
 

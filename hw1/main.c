@@ -2,18 +2,13 @@
 #include "clock.h"
 #include "counter.h"
 #include "devices.h"
+#include "textEditor.h"
 
 struct sembuf p1 = {0, -1, SEM_UNDO }, p2 = {1, -1, SEM_UNDO}, p3 = {2, -1, SEM_UNDO};
 struct sembuf v1 = {0, 1, SEM_UNDO }, v2 = {1, 1, SEM_UNDO }, v3 = {2,1,SEM_UNDO};
 static int shm1, shm2, shm3, sem_id;
 
-
-unsigned char fpga_set_blank[10] = {
-	// memset(array,0x00,sizeof(array));
-	0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
-};
-
-void getseg(int **p1, int **p2, struct outbuf** p3){ // init
+void getseg(int **sh1, int **sh2, struct outbuf** sh3){ // init
 	/*create shared mem*/
 	if((shm1 = shmget(SHARED_KEY1, sizeof(int), 0600 | IFLAGS)) == -1){	
 		perror("error shmget\n");
@@ -24,21 +19,21 @@ void getseg(int **p1, int **p2, struct outbuf** p3){ // init
 		perror("error shmget\n");
 		exit(1);
 	}
-	if((shm3 = shmget(SHARED_KEY3, sizeof(int), 0600 | IFLAGS)) == -1){ 
-		perror("error shmget\n");
+	if((shm3 = shmget(SHARED_KEY3, sizeof(struct outbuf), 0600 | IFLAGS)) == -1){ 
+		perror("error shmget3\n");
 		exit(1);
 	}
 	/* attach shared mem to process */
-	if((*p1 = (int*)shmat(shm1, 0, 0))==ERR_INT){
+	if((*sh1 = (int*)shmat(shm1, 0, 0))==ERR_INT){
 		perror("error shmget\n");
 		exit(1);	
 	}
-	if((*p2 = (int*)shmat(shm2, 0, 0))==ERR_INT){
+	if((*sh2 = (int*)shmat(shm2, 0, 0))==ERR_INT){
 		perror("error shmget\n");
 		exit(1);
 	}
 
-	if((*p3 = (struct outbuf*)shmat(shm3, 0, 0))==ERR_OUTBUF){
+	if((*sh3 = (struct outbuf*)shmat(shm3, 0, 0))==ERR_OUTBUF){
 		perror("error shmget\n");
 		exit(1);
 	}
@@ -108,7 +103,7 @@ void proc_in(int semid, int *buf_in){
 	int flag = 0;
 	size_sw = sizeof(push_sw_buff);
 	while(1){
-		printf("read %d\n", *buf_in);
+		//printf("read %d\n", *buf_in);
 		usleep(350000);
 		if((rd = read(fd_key, ev, size * BUFF_SIZE)) >= size){
 			value = ev[0].value;
@@ -163,9 +158,16 @@ void proc_main(int semid, int *buf_in, int *buf_mode, struct outbuf *buf_out){
 	counter_info.number = 0;
 	counter_info.system = 10;
 
+	/*init text editor data*/
+	struct text_editor_data text_editor_info;
+	text_editor_info.cnt = 0;
+	text_editor_info.mode = TEXT_ENG_MODE;
+	memset(text_editor_info.text , 0, 9);
+	text_editor_info.idx = 0;
+
 	while(1){
 		inflag = 1;
-
+		
 		// printf("main! %d", *buf_in);
 		switch(*buf_in){
 			case (KEY_VOL_DOWN*10):
@@ -197,6 +199,8 @@ void proc_main(int semid, int *buf_in, int *buf_mode, struct outbuf *buf_out){
 				mode_counter(sw, inflag, &(counter_info), buf_out);
 				break;
 			case 3:
+				mode_text_editor(sw,inflag, &(text_editor_info), buf_out);
+				break;
             case 4:
                 break;
         }
@@ -224,20 +228,22 @@ void proc_out(int semid, int *buf_mode, struct outbuf* buf_out){
 				printf("CLOCK OUT: %d %s\n",buf_out->led, buf_out->fnd);
 				led(buf_out->led);
 				fnd(buf_out->fnd);
-				dot_matrix(fpga_set_blank);
-				text_lcd(nullstr);
+				dot_matrix(buf_out->dot_matrix);
+				text_lcd(buf_out->text_lcd);
 				break;
+
 			case 2:
 				printf("CLOCK OUT: %d %s\n",buf_out->led, buf_out->fnd);
 				led(buf_out->led);
 				fnd(buf_out->fnd);
-				dot_matrix(fpga_set_blank);
-				text_lcd(nullstr);
-				// printf("COUNT OUT: %d %s\n", *buf_data1, buf_data2->d_buf);
-				// led(*buf_data1);
-				// fnd(buf_data2->d_buf);
-				// dot_matrix(-1);
-				// text_lcd(nullstr);
+				dot_matrix(buf_out->dot_matrix);
+				text_lcd(buf_out->text_lcd);
+				break;
+			case 3:
+				led(buf_out->led);
+				fnd(buf_out->fnd);
+				dot_matrix(buf_out->dot_matrix);
+				text_lcd(buf_out->text_lcd);
 				break;
 			default:
 				break;
@@ -251,6 +257,7 @@ void proc_out(int semid, int *buf_mode, struct outbuf* buf_out){
 init_buf(int *buf_in, int *buf_mode, struct outbuf* buf_out){
 	*buf_mode = 1;
 	*buf_in = 0;
+	memset(buf_out->text_lcd, 0, MAX_TEXT_LCD); 
 }	
 
 int main (int argc, char *argv[])
@@ -264,7 +271,7 @@ int main (int argc, char *argv[])
 	sem_id = getsem(); //creat and init semaphore
 	getseg (&buf_in, &buf_mode, &buf_out);	//create and attach shared mem 
 	init_buf(buf_in, buf_mode, buf_out);
-
+	device_open();
 	/* create child processes */
 	switch(pid_in = fork()){
 		case -1:

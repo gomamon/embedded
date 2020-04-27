@@ -1,6 +1,33 @@
 #include "main.h"
 #include "devices.h"
 
+int dev_fnd;
+int dev_text_lcd;
+int dev_dot;
+void device_open(){
+
+
+	dev_fnd = open(FND_DEVICE, O_RDWR);
+	if(dev_fnd<0){
+		printf("Devices open error : %s\n",FND_DEVICE);
+	}
+
+	/*text_dot_matrix*/
+	dev_dot = open(FPGA_DOT_DEVICE, O_WRONLY);
+	if (dev_dot<0) {
+		printf("Device open error : %s\n",FPGA_DOT_DEVICE);
+		exit(1);
+	}
+
+	/*text_lcd_open*/
+	dev_text_lcd = open(FPGA_TEXT_LCD_DEVICE, O_WRONLY);
+	if ( dev_text_lcd<0) {
+		printf("Device open error : %s\n",FPGA_TEXT_LCD_DEVICE);
+		exit(1);
+	}
+}
+
+
 void led(unsigned char data)
 {
 	int fd,i;
@@ -44,89 +71,35 @@ void led(unsigned char data)
 
 void fnd(char *str_data)
 {
-	int dev;
 	unsigned char retval;
 	unsigned char data[4];
 	int i;
 	int str_size;
 
-	//printf("fnd:%s\n",str_data);
-
     for(i=0;i<4;i++)
     {
         data[i]=str_data[i]-0x30;
-		// printf("%d\n",data[i]);
 	}
 
-    dev = open(FND_DEVICE, O_RDWR);
-    if (dev<0) {
-        printf("Device open error : %s\n",FND_DEVICE);
-        exit(1);
-    }
 
-
-    retval=write(dev,&data,4);	
+    retval=write(dev_fnd,&data,4);	
     if(retval<0) {
         printf("Write Error!\n");
         exit(1);
     }
 	memset(data,0,sizeof(data));
 
-	retval=read(dev,&data,4);
-	if(retval<0) {
-		printf("Read Error!\n");
-		return;
-	}
-
-	close(dev);
-
 	return;
 }
 
 
-
-
-
-//#include "./fpga_dot_font.h"
-//#define FPGA_DOT_DEVICE "/dev/fpga_dot"
-
 void dot_matrix(unsigned char* data)
 {
 	int i;
-	int dev;
-	int str_size;
-	int set_num;
-	
+
 	printf("dot: %s\n",data);
-	// if(argc!=2) {
-	// 	printf("please input the parameter! \n");
-	// 	printf("ex)./fpga_dot_test 7\n");
-	// 	return -1;
-	// }
 
-	// set_num = atoi(argv[1]);
-	// if(set_num<0||set_num>9) {
-	// 	printf("Invalid Numner (0~9) !\n");
-	// 	return -1;
-	// }
-
-	dev = open(FPGA_DOT_DEVICE, O_WRONLY);
-	if (dev<0) {
-		printf("Device open error : %s\n",FPGA_DOT_DEVICE);
-		exit(1);
-	}
-	
-	str_size=10;
-
-    /*
-	write(dev,fpga_set_full,sizeof(fpga_set_full));
-	sleep(1);
-	*/
-
-	write(dev,data,10);
-
-
-	close(dev);
+	write(dev_dot,data,10);
 	
 	return;
 }
@@ -135,45 +108,30 @@ void dot_matrix(unsigned char* data)
 
 /*text lcd*/
 
-void text_lcd(char *str_data)
+void text_lcd(unsigned char *str_data)
 {
 	int i;
-	int dev;
 	int str_size;
 	int chk_size;
-	// char *data[2] = {"",""};
 	unsigned char string[32];
-	int tok_size = strlen(str_data);
+	int tok_size = 9;
 
 	printf("text_lcd: %s\n",str_data);
-	memset(string,' ',sizeof(string));	
-		
-	for(i=0; i<sizeof(str_data); i++){
-		if(str_data[i] == '\n' || str_data[i] == 0);
+	for(i=0; i<9; i++){
+		if(str_data[i] == '\0' || str_data[i] == 0 ){
 			tok_size = i;
+			break;
+		}
+		string[i] = str_data[i];
+	}
+	printf("tok_size %d\n",tok_size);
+	if(tok_size>=0){
+		//strncat(string, str_data, tok_size);
+		memset(string+tok_size, ' ', 32-tok_size);
 	}
 
-	dev = open(FPGA_TEXT_LCD_DEVICE, O_WRONLY);
-	if (dev<0) {
-		printf("Device open error : %s\n",FPGA_TEXT_LCD_DEVICE);
-		exit(1);
-	}
-
-	if(tok_size>0){
-		strncat(string, str_data, tok_size);
-		memset(string+tok_size, ' ', LINE_BUFF-tok_size);
-	}
-
-	if(tok_size<strlen(str_data)){
-		int tok2_idx = tok_size+2;
-		int tok2_size = strlen(str_data+tok2_idx);		
-		strncat(string,str_data+tok2_idx, tok2_size);
-		memset(string+LINE_BUFF+tok2_size, ' ', LINE_BUFF-tok2_size);
-	}
-
-
-	write(dev,string,MAX_BUFF);		
-	close(dev);
+	printf("STRING:%s\n",string);
+	write( dev_text_lcd,string,MAX_BUFF);		
 	
 	return;
 }

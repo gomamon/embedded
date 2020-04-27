@@ -38,7 +38,8 @@
 void led(unsigned char data);
 void fnd(char *str_data);
 void dot_matrix(unsigned char* data);
-void text_lcd(char *data);
+void text_lcd(unsigned char *data);
+void device_open();
 
 
 

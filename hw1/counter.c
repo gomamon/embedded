@@ -60,4 +60,9 @@ void mode_counter(int sw, int inflag, struct counter_data *counter_info, struct 
         
     }
 
+    /* dot_mat & text_led set empty*/
+    memset(buf_out->dot_matrix,0x00,MAX_DOT_MATRIX);
+    memset(buf_out->text_lcd, 0, MAX_TEXT_LCD);
+
+    return;
 }

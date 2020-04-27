@@ -53,7 +53,8 @@ void mode_clock(int sw, int inflag, struct clock_data *clock_info, int* buf_data
         }
         
     }
-    sprintf((buf_data2)->d_buf,"%02d%02d",tm->tm_hour+clock_info->clock_h,tm->tm_min+clock_info->clock_m);
+    //save formatting string for time to buffer.
+    sprintf((buf_data2)->d_buf,"%02d%02d",(tm->tm_hour+clock_info->clock_h)%25,(tm->tm_min+clock_info->clock_m)%61);
     (buf_data2)->d_nread = 4;
     return;
 }

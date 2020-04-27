@@ -1,5 +1,6 @@
 #include "main.h"
 #include "clock.h"
+#include "counter.h"
 #include "devices.h"
 
 struct sembuf p1 = {0, -1, SEM_UNDO }, p2 = {1, -1, SEM_UNDO}, p3 = {2, -1, SEM_UNDO};
@@ -156,23 +157,26 @@ void proc_main(int semid, int *buf_in, int *buf_mode, int *buf_data1, struct dat
 	int sw = SW1;
 	int inflag = 0;
 	*buf_in = 0;
+
+	/*init clock data*/
 	struct clock_data clock_info;
 	clock_info.clock_h =0;
 	clock_info.clock_m =0;
 	clock_info.clock_mode = 0;
-	// time_t rawtime;
-	// struct tm *timeinfo
-	
-	
+
+	/*init counter data*/
+	struct counter_data counter_info;
+	counter_info.number = 0;
+	counter_info.system = 10;
+
 	while(1){
 		inflag = 1;
 
 		// printf("main! %d", *buf_in);
-		// printf("main: %d",*buf_in);
 		switch(*buf_in){
 			case (KEY_VOL_DOWN*10):
 				*buf_mode = (*buf_mode>1)? *buf_mode-1 : 4;
-				sw = 1 << 9;
+				sw = 1<<9;
 				break;
 			case (KEY_VOL_UP*10):
 				*buf_mode = (*buf_mode<4)? *buf_mode+1 : 1;
@@ -190,12 +194,15 @@ void proc_main(int semid, int *buf_in, int *buf_mode, int *buf_data1, struct dat
                 printf("sw: %d\n", sw);
                 break;
         }
+		printf("mode : %d\n",*buf_mode);
         switch (*buf_mode) {
             case 1:
                 mode_clock(sw, inflag, &(clock_info), buf_data1, buf_data2);
                 break;
             case 2:
-            case 3:
+				mode_counter(sw, inflag, &(counter_info),buf_data1, buf_data2);
+				break;
+			case 3:
             case 4:
                 break;
         }
@@ -233,6 +240,13 @@ void proc_out(int semid, int *buf_mode, int *buf_data1, struct databuf *buf_data
 		switch(*buf_mode){
 			case 1:
 				printf("CLOCK OUT: %d %s\n",*buf_data1, buf_data2->d_buf);
+				led(*buf_data1);
+				fnd(buf_data2->d_buf);
+				dot_matrix(-1);
+				text_lcd(nullstr);
+				break;
+			case 2:
+				printf("COUNT OUT: %d %s\n", *buf_data1, buf_data2->d_buf);
 				led(*buf_data1);
 				fnd(buf_data2->d_buf);
 				dot_matrix(-1);

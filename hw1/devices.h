@@ -37,7 +37,7 @@
 
 void led(unsigned char data);
 void fnd(char *str_data);
-void dot_matrix(int data);
+void dot_matrix(unsigned char* data);
 void text_lcd(char *data);
 
 

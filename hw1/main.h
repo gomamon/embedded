@@ -35,7 +35,7 @@
 #define SHARED_KEY4 (key_t) 0x13
 #define SEM_KEY (key_t) 0x20 //semaphore key
 #define IFLAGS (IPC_CREAT)
-#define ERR ((struct databuf *)-1)
+#define ERR_OUTBUF ((struct outbuf *)-1)
 #define ERR_INT ((int *)-1)
 #define SIZE 2048
 
@@ -54,7 +54,6 @@
 #define SW9 1
 
 #define MAX_BUTTON 9
-
 #define MODE_NUM 4
 
 
@@ -65,8 +64,11 @@ typedef union {
 	unsigned short * array;
 } semun;
 
-
-struct databuf {
-	int d_nread;
-	char d_buf[SIZE];
+struct outbuf{
+	int led;
+	unsigned char fnd[5];
+	unsigned char dot_matrix[10];
+	unsigned char text_led[34];
 };
+
+

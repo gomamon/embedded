@@ -5,45 +5,40 @@
 
 struct sembuf p1 = {0, -1, SEM_UNDO }, p2 = {1, -1, SEM_UNDO}, p3 = {2, -1, SEM_UNDO};
 struct sembuf v1 = {0, 1, SEM_UNDO }, v2 = {1, 1, SEM_UNDO }, v3 = {2,1,SEM_UNDO};
-static int shm_key, shm_mode, shm_data1, shm_data2, sem_id;
+static int shm1, shm2, shm3, sem_id;
 
 
+unsigned char fpga_set_blank[10] = {
+	// memset(array,0x00,sizeof(array));
+	0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+};
 
-void getseg(int **p1, int **p2, int **p3, struct databuf **p4){ // init
+void getseg(int **p1, int **p2, struct outbuf** p3){ // init
 	/*create shared mem*/
-	if((shm_key = shmget(SHARED_KEY1, sizeof(int), 0600 | IFLAGS)) == -1){	
+	if((shm1 = shmget(SHARED_KEY1, sizeof(int), 0600 | IFLAGS)) == -1){	
 		perror("error shmget\n");
 		exit(1);
 	}
 
-	if((shm_mode = shmget(SHARED_KEY2, sizeof(int), 0600 | IFLAGS)) == -1){	
+	if((shm2 = shmget(SHARED_KEY2, sizeof(int), 0600 | IFLAGS)) == -1){	
 		perror("error shmget\n");
 		exit(1);
 	}
-	if((shm_data1 = shmget(SHARED_KEY3, sizeof(int), 0600 | IFLAGS)) == -1){ 
+	if((shm3 = shmget(SHARED_KEY3, sizeof(int), 0600 | IFLAGS)) == -1){ 
 		perror("error shmget\n");
 		exit(1);
 	}
-	if((shm_data2 = shmget(SHARED_KEY4, sizeof(struct databuf), 0600 | IFLAGS)) == -1){ 
-		perror("error shmget\n");
-		exit(1);
-	}
-
 	/* attach shared mem to process */
-	if((*p1 = (int*)shmat(shm_key, 0, 0))==ERR_INT){
+	if((*p1 = (int*)shmat(shm1, 0, 0))==ERR_INT){
 		perror("error shmget\n");
 		exit(1);	
 	}
-	if((*p2 = (int*)shmat(shm_mode, 0, 0))==ERR_INT){
+	if((*p2 = (int*)shmat(shm2, 0, 0))==ERR_INT){
 		perror("error shmget\n");
 		exit(1);
 	}
 
-	if((*p3 = (int*)shmat(shm_data1, 0, 0))==ERR_INT){
-		perror("error shmget\n");
-		exit(1);
-	}
-	if((*p4 = (struct databuf*)shmat(shm_data2, 0, 0))==ERR){
+	if((*p3 = (struct outbuf*)shmat(shm3, 0, 0))==ERR_OUTBUF){
 		perror("error shmget\n");
 		exit(1);
 	}
@@ -84,10 +79,9 @@ int getsem(){
 void remobj(){
 
 	/* remove shm */
-	if (shmctl(shm_key, IPC_RMID, 0) == -1) exit(1);
-	if (shmctl(shm_mode, IPC_RMID, 0) == -1) exit(1);
-	if (shmctl(shm_data1, IPC_RMID, 0) == -1) exit(1);
-	if (shmctl(shm_data2, IPC_RMID, 0) == -1) exit(1);
+	if (shmctl(shm1, IPC_RMID, 0) == -1) exit(1);
+	if (shmctl(shm2, IPC_RMID, 0) == -1) exit(1);
+	if (shmctl(shm3, IPC_RMID, 0) == -1) exit(1);
 	/* remove semaphore */
 	if (semctl(sem_id, 0, IPC_RMID, 0) == -1) exit(1);
 }
@@ -152,7 +146,7 @@ void proc_in(int semid, int *buf_in){
 }
 
 
-void proc_main(int semid, int *buf_in, int *buf_mode, int *buf_data1, struct databuf *buf_data2){
+void proc_main(int semid, int *buf_in, int *buf_mode, struct outbuf *buf_out){
 	/* main process */
 	int sw = SW1;
 	int inflag = 0;
@@ -197,16 +191,16 @@ void proc_main(int semid, int *buf_in, int *buf_mode, int *buf_data1, struct dat
 		printf("mode : %d\n",*buf_mode);
         switch (*buf_mode) {
             case 1:
-                mode_clock(sw, inflag, &(clock_info), buf_data1, buf_data2);
+                mode_clock(sw, inflag, &(clock_info), buf_out);
                 break;
             case 2:
-				mode_counter(sw, inflag, &(counter_info),buf_data1, buf_data2);
+				mode_counter(sw, inflag, &(counter_info), buf_out);
 				break;
 			case 3:
             case 4:
                 break;
         }
-        //printf("time! %02d: %02d\n", tm->tm_hour, tm->tm_min);
+
 		char tmp[4] = "out\0";
 
 		*buf_in = 0;
@@ -214,43 +208,36 @@ void proc_main(int semid, int *buf_in, int *buf_mode, int *buf_data1, struct dat
 		if(inflag == 1){
 			semop(semid, &v1, 1);
 		}
-		// strcpy(buf_data1->d_buf, tmp);
-		// buf_data1->d_nread = strlen(tmp);
 
 	}	
 }
 
-void proc_out(int semid, int *buf_mode, int *buf_data1, struct databuf *buf_data2){
+void proc_out(int semid, int *buf_mode, struct outbuf* buf_out){
 	/* output process */
 	char *tmp;
 	while(1){
 		char nullstr[16];
 		memset(nullstr, 0, 16);
-		// int test1 = 8;
-		// char *test2 = "3332\0";
-		// char *test3 = "hola\nyoyo\0";
-		// printf("test2:%s\n",test2);
-		// led(test1);	
-		// fnd(test2);
-		// printf("end fnd");
-		// dot_matrix(test1);
-		// text_lcd(test3);
-
 		
 		switch(*buf_mode){
 			case 1:
-				printf("CLOCK OUT: %d %s\n",*buf_data1, buf_data2->d_buf);
-				led(*buf_data1);
-				fnd(buf_data2->d_buf);
-				dot_matrix(-1);
+				printf("CLOCK OUT: %d %s\n",buf_out->led, buf_out->fnd);
+				led(buf_out->led);
+				fnd(buf_out->fnd);
+				dot_matrix(fpga_set_blank);
 				text_lcd(nullstr);
 				break;
 			case 2:
-				printf("COUNT OUT: %d %s\n", *buf_data1, buf_data2->d_buf);
-				led(*buf_data1);
-				fnd(buf_data2->d_buf);
-				dot_matrix(-1);
+				printf("CLOCK OUT: %d %s\n",buf_out->led, buf_out->fnd);
+				led(buf_out->led);
+				fnd(buf_out->fnd);
+				dot_matrix(fpga_set_blank);
 				text_lcd(nullstr);
+				// printf("COUNT OUT: %d %s\n", *buf_data1, buf_data2->d_buf);
+				// led(*buf_data1);
+				// fnd(buf_data2->d_buf);
+				// dot_matrix(-1);
+				// text_lcd(nullstr);
 				break;
 			default:
 				break;
@@ -261,9 +248,8 @@ void proc_out(int semid, int *buf_mode, int *buf_data1, struct databuf *buf_data
 	}
 }
 
-init_buf(int *buf_in, int *buf_mode, int* buf_data1, struct databuf* buf_data2){
+init_buf(int *buf_in, int *buf_mode, struct outbuf* buf_out){
 	*buf_mode = 1;
-	*buf_data1 = 1;
 	*buf_in = 0;
 }	
 
@@ -271,13 +257,14 @@ int main (int argc, char *argv[])
 {
 
 	pid_t pid_in =0 , pid_out=0;
-	struct databuf *buf_data2;
-	int *buf_in, *buf_mode, *buf_data1;
+	struct outbuf *buf_out;
+	int *buf_in, *buf_mode;
 	puts("START!");
 
 	sem_id = getsem(); //creat and init semaphore
-	getseg (&buf_in, &buf_mode, &buf_data1, &buf_data2);	//create and attach shared mem 
-	init_buf(buf_in, buf_mode, buf_data1, buf_data2);
+	getseg (&buf_in, &buf_mode, &buf_out);	//create and attach shared mem 
+	init_buf(buf_in, buf_mode, buf_out);
+
 	/* create child processes */
 	switch(pid_in = fork()){
 		case -1:
@@ -295,11 +282,11 @@ int main (int argc, char *argv[])
 					break;
 				case 0:
 					printf("output process\n");
-					proc_out(sem_id, buf_mode, buf_data1, buf_data2); // main -> out
+					proc_out(sem_id, buf_mode, buf_out); // main -> out
 					remobj();
 					break;
 				default:
-					proc_main(sem_id, buf_in, buf_mode, buf_data1, buf_data2); // in -> main -> out
+					proc_main(sem_id, buf_in, buf_mode, buf_out); // in -> main -> out
 					break;
 			}
 			break;

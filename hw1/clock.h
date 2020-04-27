@@ -14,4 +14,4 @@ struct clock_data {
 };
 
 
-void mode_clock(int sw, int inflag, struct clock_data *clock_info, int* buf_data1, struct databuf* buf_data2);
+void mode_clock(int sw, int inflag, struct clock_data *clock_info,struct outbuf* buf_out);

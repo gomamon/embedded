@@ -15,11 +15,11 @@
 #define DEV_SW "/dev/fpga_push_switch"
 
 
-//fpga led mmap
+/* fpga led mmap */
 #define FPGA_BASE_ADDRESS 0x08000000 //fpga_base address
-#define LED_ADDR 0x16 
+#define LED_ADDR 0x16  //led address
 
-//fpga fnd
+/* fpga fnd */
 #define MAX_DIGIT 4
 #define FND_DEVICE "/dev/fpga_fnd"
 
@@ -33,14 +33,15 @@
 #define FPGA_TEXT_LCD_DEVICE "/dev/fpga_text_lcd"
 
 
-int fd_key;
-int fd_sw;
+int dev_key;
+int dev_sw;
 
 void led(unsigned char data);
 void fnd(char *str_data);
 void dot_matrix(unsigned char* data);
 void text_lcd(unsigned char *data);
-void device_open();
 
+void device_open();
+void device_close();
 
 

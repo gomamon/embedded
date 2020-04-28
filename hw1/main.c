@@ -6,22 +6,17 @@
 #include "drawBoard.h"
 struct sembuf p1 = {0, -1, SEM_UNDO }, p2 = {1, -1, SEM_UNDO}, p3 = {2, -1, SEM_UNDO};
 struct sembuf v1 = {0, 1, SEM_UNDO }, v2 = {1, 1, SEM_UNDO }, v3 = {2,1,SEM_UNDO};
-static int shm1, shm2, shm3, sem_id;
+static int shm1, shm2, sem_id;
 
-extern int fd_key, fd_sw;
+extern int dev_key, dev_sw;
 
-void getseg(int **sh1, int **sh2, struct outbuf** sh3){ // init
+void getseg(int **sh1, struct outbuf** sh2){ // init
 	/*create shared mem*/
 	if((shm1 = shmget(SHARED_KEY1, sizeof(int), 0600 | IFLAGS)) == -1){	
 		perror("error shmget\n");
 		exit(1);
 	}
-
-	if((shm2 = shmget(SHARED_KEY2, sizeof(int), 0600 | IFLAGS)) == -1){	
-		perror("error shmget\n");
-		exit(1);
-	}
-	if((shm3 = shmget(SHARED_KEY3, sizeof(struct outbuf), 0600 | IFLAGS)) == -1){ 
+	if((shm2 = shmget(SHARED_KEY2, sizeof(struct outbuf), 0600 | IFLAGS)) == -1){ 
 		perror("error shmget3\n");
 		exit(1);
 	}
@@ -30,12 +25,7 @@ void getseg(int **sh1, int **sh2, struct outbuf** sh3){ // init
 		perror("error shmget\n");
 		exit(1);	
 	}
-	if((*sh2 = (int*)shmat(shm2, 0, 0))==ERR_INT){
-		perror("error shmget\n");
-		exit(1);
-	}
-
-	if((*sh3 = (struct outbuf*)shmat(shm3, 0, 0))==ERR_OUTBUF){
+	if((*sh2 = (struct outbuf*)shmat(shm2, 0, 0))==ERR_OUTBUF){
 		perror("error shmget\n");
 		exit(1);
 	}
@@ -78,11 +68,16 @@ void remobj(){
 	/* remove shm */
 	if (shmctl(shm1, IPC_RMID, 0) == -1) exit(1);
 	if (shmctl(shm2, IPC_RMID, 0) == -1) exit(1);
-	if (shmctl(shm3, IPC_RMID, 0) == -1) exit(1);
+
 	/* remove semaphore */
 	if (semctl(sem_id, 0, IPC_RMID, 0) == -1) exit(1);
 }
 
+
+void init_buf(int *buf_in, struct outbuf* buf_out){
+	*buf_in = 0;
+	memset(buf_out->text_lcd, 0, MAX_TEXT_LCD); 
+}	
 
 void proc_in(int semid, int *buf_in){
 	/* input process */
@@ -96,16 +91,14 @@ void proc_in(int semid, int *buf_in){
 
 	size_sw = sizeof(push_sw_buff);
 	while(1){
-		//printf("read %d\n", *buf_in);
-		usleep(350000);
-		if((rd = read(fd_key, ev, size * BUFF_SIZE)) >= size){
+		usleep(250000);
+		if((rd = read(dev_key, ev, size * BUFF_SIZE)) >= size){
 			value = ev[0].value;
 			if(value == KEY_PRESS){
 				switch(ev[0].code){
 					case KEY_VOL_UP:
 					case KEY_VOL_DOWN:
 					case KEY_BACK:
-					//	printf("READ code: %d\n",ev[0].code);
 						*buf_in = (ev[0].code) * 10;
 						flag = 1;
 						break;
@@ -113,7 +106,7 @@ void proc_in(int semid, int *buf_in){
 			}
 		}
 		else{
-			read(fd_sw, &push_sw_buff, size_sw);
+			read(dev_sw, &push_sw_buff, size_sw);
 			int btn=0;
 			for( i=0; i<MAX_BUTTON;i++){
 				btn <<= 1;
@@ -175,7 +168,6 @@ void proc_main(int semid, int *buf_in, struct outbuf *buf_out){
 				break;
 			case (KEY_BACK*10):
 				return;
-				sw = 1<<9;
 				break;
 			case 0 :
 				inflag = 0;
@@ -229,23 +221,17 @@ void proc_out(int semid, struct outbuf* buf_out){
 	}
 }
 
-init_buf(int *buf_in, int *buf_mode, struct outbuf* buf_out){
-	*buf_mode = 1;
-	*buf_in = 0;
-	memset(buf_out->text_lcd, 0, MAX_TEXT_LCD); 
-}	
 
-int main (int argc, char *argv[])
+int main ()
 {
 
 	pid_t pid_in =0 , pid_out=0;
 	struct outbuf *buf_out;
 	int *buf_in, *buf_mode;
-	puts("START!");
 
 	sem_id = getsem(); //creat and init semaphore
-	getseg (&buf_in, &buf_mode, &buf_out);	//create and attach shared mem 
-	init_buf(buf_in, buf_mode, buf_out);
+	getseg (&buf_in, &buf_out);	//create and attach shared mem 
+	init_buf(buf_in, buf_out);
 	device_open();
 
 	/* create child processes */
@@ -254,8 +240,8 @@ int main (int argc, char *argv[])
 			perror("ERROR: fork()");
 			break;
 		case 0:
-			printf("input process\n");
-			proc_in(sem_id, buf_in); 	//in -> main
+			/* input process */
+			proc_in(sem_id, buf_in); 
 			remobj();
 			break;
 		default:
@@ -264,21 +250,23 @@ int main (int argc, char *argv[])
 					perror("ERROR: fork()");
 					break;
 				case 0:
-					printf("output process\n");
-					proc_out(sem_id, buf_out); // main -> out
+					/* output process */
+					proc_out(sem_id, buf_out); 
 					remobj();
 					break;
 				default:
-					proc_main(sem_id, buf_in,  buf_out); // in -> main -> out
-					remobj();
+					/* main process */
+					proc_main(sem_id, buf_in, buf_out);
+
+					/* kill chid processes, remove semaphore and close devices  */
 					kill(pid_in, SIGKILL);
 					kill(pid_out,SIGKILL);
-
+					remobj();
+					device_close();
 					break;
 			}
 			break;
 	}
-
 
 	return 0;
 }

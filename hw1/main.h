@@ -31,7 +31,6 @@
 
 #define SHARED_KEY1 (key_t) 0x10
 #define SHARED_KEY2 (key_t) 0x11
-#define SHARED_KEY3 (key_t) 0x12
 #define SEM_KEY (key_t) 0x20 //semaphore key
 #define IFLAGS (IPC_CREAT)
 #define ERR_OUTBUF ((struct outbuf *)-1)
@@ -71,6 +70,4 @@ struct outbuf{
 	unsigned char fnd[MAX_FND];
 	unsigned char dot_matrix[MAX_DOT_MATRIX];
 	unsigned char text_lcd[MAX_TEXT_LCD];
-
-	int cursor_info;
 };

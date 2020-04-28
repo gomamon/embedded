@@ -11,3 +11,4 @@ struct counter_data {
 
 
 void mode_counter(int sw, int inflag, struct counter_data *counter_info, struct outbuf* buf_out);
+void init_counter_info(struct counter_data *counter_info);

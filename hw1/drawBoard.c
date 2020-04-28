@@ -26,8 +26,10 @@ void mode_draw_board(int sw, int inflag, struct draw_board_data *draw_board_info
     if (inflag) {
         update = BOARD_UPDATED;
         switch (sw) {
-            case KEY_VOL:
+            case KEY_VOL:  //init
             case SW1:  // reset image
+                buf_out->led = 0;
+                buf_out->text_lcd[0] = 0;
                 init_draw_board_info(draw_board_info);
                 break;
             case SW2:   // UP
@@ -104,6 +106,7 @@ void mode_draw_board(int sw, int inflag, struct draw_board_data *draw_board_info
             (buf_out->dot_matrix)[draw_board_info->cursor_y] =  tmp_linenum;
         }
     }
+
 
 }
 

@@ -4,6 +4,7 @@
 int dev_fnd;
 int dev_text_lcd;
 int dev_dot;
+int fd_led;
 extern int fd_key, fd_sw;
 
 void device_open(){
@@ -18,6 +19,11 @@ void device_open(){
 		exit(1);
 	}
 
+	fd_led = open("/dev/mem", O_RDWR | O_SYNC);
+	if (fd_led < 0) {
+		perror("/dev/mem open error");
+		exit(1);
+	}
 
 	dev_fnd = open(FND_DEVICE, O_RDWR);
 	if(dev_fnd<0){
@@ -42,7 +48,7 @@ void device_open(){
 
 void led(unsigned char data)
 {
-	int fd,i;
+	int i;
 
 	unsigned long *fpga_addr = 0;
 	unsigned char *led_addr =0;
@@ -53,17 +59,13 @@ void led(unsigned char data)
 		exit(1);
 	}
 
-	fd = open("/dev/mem", O_RDWR | O_SYNC);
-	if (fd < 0) {
-		perror("/dev/mem open error");
-		exit(1);
-	}
 
-	fpga_addr = (unsigned long *)mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fd, FPGA_BASE_ADDRESS);
+
+	fpga_addr = (unsigned long *)mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fd_led, FPGA_BASE_ADDRESS);
 	if (fpga_addr == MAP_FAILED)
 	{
 		printf("mmap error!\n");
-		close(fd);
+		close(fd_led);
 		exit(1);
 	}
 	
@@ -76,7 +78,6 @@ void led(unsigned char data)
 	data=*led_addr; //read led
 
 	munmap(led_addr, 4096);
-	close(fd);
 	return;
 }
 

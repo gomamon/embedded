@@ -6,6 +6,13 @@ void mode_counter(int sw, int inflag, struct counter_data *counter_info, struct 
     if(inflag == 1){
         //switch updated;
         switch(sw){
+            case KEY_VOL:
+                //dot_mat & text_led set empty
+                memset(buf_out->dot_matrix,0x00,MAX_DOT_MATRIX);
+                memset(buf_out->text_lcd, 0, MAX_TEXT_LCD);
+                //init
+                init_counter_info(counter_info);
+                break;
             case SW1:
                 //change numberic system
                 if(counter_info->system == 2)  counter_info->system = 10;
@@ -60,9 +67,12 @@ void mode_counter(int sw, int inflag, struct counter_data *counter_info, struct 
         
     }
 
-    /* dot_mat & text_led set empty*/
-    memset(buf_out->dot_matrix,0x00,MAX_DOT_MATRIX);
-    memset(buf_out->text_lcd, 0, MAX_TEXT_LCD);
+
 
     return;
+}
+
+void init_counter_info(struct counter_data *counter_info){
+	counter_info->number = 0;
+	counter_info->system = 10;
 }

@@ -11,3 +11,4 @@ struct text_editor_data {
 
 void mode_text_editor(int sw, int inflag, struct text_editor_data *text_editor_info, struct outbuf* buf_out);
 int get_switch_num(int code);
+void init_text_editor_info(struct text_editor_data *text_editor_info);

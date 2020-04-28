@@ -134,13 +134,14 @@ void proc_in(int semid, int *buf_in){
 }
 
 
-void proc_main(int semid, int *buf_in, int *buf_mode, struct outbuf *buf_out){
+void proc_main(int semid, int *buf_in, struct outbuf *buf_out){
 	/* main process */
 
 
 	int sw = SW1;
 	int inflag = 0;
 	*buf_in = 0;
+	int mode = 1;
 
 	struct clock_data clock_info;
 	struct counter_data counter_info;
@@ -148,19 +149,13 @@ void proc_main(int semid, int *buf_in, int *buf_mode, struct outbuf *buf_out){
 	struct draw_board_data draw_board_info;
 
 	/*init clock data*/
-	clock_info.clock_h =0;
-	clock_info.clock_m =0;
-	clock_info.clock_mode = 0;
+	init_clock_info(&clock_info);
 
 	/*init counter data*/
-	counter_info.number = 0;
-	counter_info.system = 10;
+	init_counter_info(&counter_info);
 
 	/*init text editor data*/
-	text_editor_info.cnt = 0;
-	text_editor_info.mode = TEXT_ENG_MODE;
-	memset(text_editor_info.text , 0, MAX_TEXT_LCD);
-	text_editor_info.idx = 0;
+	init_text_editor_info(&text_editor_info);
 
 	/*init draw board data*/
     init_draw_board_info(&draw_board_info);
@@ -171,15 +166,15 @@ void proc_main(int semid, int *buf_in, int *buf_mode, struct outbuf *buf_out){
 		// printf("main! %d", *buf_in);
 		switch(*buf_in){
 			case (KEY_VOL_DOWN*10):
-				*buf_mode = (*buf_mode>1)? *buf_mode-1 : 4;
+				mode = (mode>1)? mode-1 : 4;
 				sw = 1<<9;
 				break;
 			case (KEY_VOL_UP*10):
-				*buf_mode = (*buf_mode<4)? *buf_mode+1 : 1;
+				mode = (mode<4)? mode+1 : 1;
 				sw = 1<<9;
 				break;
 			case (KEY_BACK*10):
-				*buf_mode = 0;
+				return;
 				sw = 1<<9;
 				break;
 			case 0 :
@@ -190,8 +185,8 @@ void proc_main(int semid, int *buf_in, int *buf_mode, struct outbuf *buf_out){
                 printf("sw: %d\n", sw);
                 break;
         }
-		printf("mode : %d\n",*buf_mode);
-        switch (*buf_mode) {
+		printf("mode : %d\n",mode);
+        switch (mode) {
             case 1:
                 mode_clock(sw, inflag, &(clock_info), buf_out);
                 break;
@@ -216,7 +211,7 @@ void proc_main(int semid, int *buf_in, int *buf_mode, struct outbuf *buf_out){
 	}	
 }
 
-void proc_out(int semid, int *buf_mode, struct outbuf* buf_out){
+void proc_out(int semid, struct outbuf* buf_out){
 	/* output process */
 	char *tmp;
 	while(1){
@@ -270,11 +265,15 @@ int main (int argc, char *argv[])
 					break;
 				case 0:
 					printf("output process\n");
-					proc_out(sem_id, buf_mode, buf_out); // main -> out
+					proc_out(sem_id, buf_out); // main -> out
 					remobj();
 					break;
 				default:
-					proc_main(sem_id, buf_in, buf_mode, buf_out); // in -> main -> out
+					proc_main(sem_id, buf_in,  buf_out); // in -> main -> out
+					remobj();
+					kill(pid_in, SIGKILL);
+					kill(pid_out,SIGKILL);
+
 					break;
 			}
 			break;

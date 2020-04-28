@@ -24,6 +24,10 @@ void mode_text_editor(int sw, int inflag, struct text_editor_data *text_editor_i
     int swnum;
     if(inflag == 1){
         switch(sw){
+            case KEY_VOL:
+                init_text_editor_info(text_editor_info);
+                buf_out->led = 0;
+                break;
             case (SW2|SW3): // text LCD clear
                 memset(text_editor_info->text , 0, MAX_TEXT_LCD);
                 text_editor_info->idx = 0;
@@ -90,11 +94,16 @@ void mode_text_editor(int sw, int inflag, struct text_editor_data *text_editor_i
     }
 
     /* save text edit data to buf_out form */
-   
     sprintf(buf_out->fnd,"%04d",text_editor_info->cnt);
     sprintf(buf_out->text_lcd,"%s",text_editor_info->text);
-    printf("TEST: %s\n", buf_out->text_lcd);
-    buf_out->led = 0;
+    
 
     return;
+}
+
+void init_text_editor_info(struct text_editor_data *text_editor_info){
+    text_editor_info->cnt = 0;
+	text_editor_info->mode = TEXT_ENG_MODE;
+	memset(text_editor_info->text , 0, MAX_TEXT_LCD);
+	text_editor_info->idx = 0;
 }

@@ -4,7 +4,19 @@
 int dev_fnd;
 int dev_text_lcd;
 int dev_dot;
+extern int fd_key, fd_sw;
+
 void device_open(){
+
+    if ((fd_key = open(DEV_KEY, O_RDONLY | O_NONBLOCK)) == -1) {
+        printf("/dev/input/event0 is not a vaild device \n");
+		exit(1);
+    }
+	if ((fd_sw = open(DEV_SW, O_RDWR ))== -1) {
+		printf("/dev/fpga_push_switch is not a vaild device \n");
+		close(fd_sw);
+		exit(1);
+	}
 
 
 	dev_fnd = open(FND_DEVICE, O_RDWR);
@@ -114,23 +126,23 @@ void text_lcd(unsigned char *str_data)
 	int str_size;
 	int chk_size;
 	unsigned char string[32];
-	int tok_size = 9;
+	int tok_size = 32;
 
-	printf("text_lcd: %s\n",str_data);
-	for(i=0; i<9; i++){
+//	printf("text_lcd: %s\n",str_data);
+	for(i=0; i<32; i++){
 		if(str_data[i] == '\0' || str_data[i] == 0 ){
 			tok_size = i;
 			break;
 		}
 		string[i] = str_data[i];
 	}
-	printf("tok_size %d\n",tok_size);
+//	printf("tok_size %d\n",tok_size);
 	if(tok_size>=0){
 		//strncat(string, str_data, tok_size);
 		memset(string+tok_size, ' ', 32-tok_size);
 	}
 
-	printf("STRING:%s\n",string);
+//	printf("STRING:%s\n",string);
 	write( dev_text_lcd,string,MAX_BUFF);		
 	
 	return;

@@ -25,7 +25,7 @@ void mode_text_editor(int sw, int inflag, struct text_editor_data *text_editor_i
     if(inflag == 1){
         switch(sw){
             case (SW2|SW3): // text LCD clear
-                memset(text_editor_info->text , 0, 9);
+                memset(text_editor_info->text , 0, MAX_TEXT_LCD);
                 text_editor_info->idx = 0;
                 text_editor_info->cnt = 0;
                 break;
@@ -71,12 +71,13 @@ void mode_text_editor(int sw, int inflag, struct text_editor_data *text_editor_i
         }
     }
 
-    if(text_editor_info->idx > 8){
+    if(text_editor_info->idx > 32){
         int i;
-        for(i=1; i<=8; i++){
+        for(i=1; i<=32; i++){
             text_editor_info->text[i-1] = text_editor_info->text[i];
         }
-        text_editor_info->idx = 8;
+        text_editor_info->text[32] = 0;
+        text_editor_info->idx = 32;
     }
 
     switch(text_editor_info->mode){

@@ -31,7 +31,7 @@
 
 #define SHARED_KEY1 (key_t) 0x10
 #define SHARED_KEY2 (key_t) 0x11
-#define SHARED_KEY3 (key_t) 0x13
+#define SHARED_KEY3 (key_t) 0x12
 #define SEM_KEY (key_t) 0x20 //semaphore key
 #define IFLAGS (IPC_CREAT)
 #define ERR_OUTBUF ((struct outbuf *)-1)
@@ -51,13 +51,14 @@
 #define SW7 4
 #define SW8 2
 #define SW9 1
+#define KEY_VOL 1<<9
 
 #define MAX_BUTTON 9
 #define MODE_NUM 4
 
 #define MAX_FND 5
 #define MAX_DOT_MATRIX 10
-#define MAX_TEXT_LCD 9
+#define MAX_TEXT_LCD 33
 
 typedef union {
 	int val;
@@ -70,6 +71,6 @@ struct outbuf{
 	unsigned char fnd[MAX_FND];
 	unsigned char dot_matrix[MAX_DOT_MATRIX];
 	unsigned char text_lcd[MAX_TEXT_LCD];
+
+	int cursor_info;
 };
-
-

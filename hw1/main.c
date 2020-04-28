@@ -3,10 +3,12 @@
 #include "counter.h"
 #include "devices.h"
 #include "textEditor.h"
-
+#include "drawBoard.h"
 struct sembuf p1 = {0, -1, SEM_UNDO }, p2 = {1, -1, SEM_UNDO}, p3 = {2, -1, SEM_UNDO};
 struct sembuf v1 = {0, 1, SEM_UNDO }, v2 = {1, 1, SEM_UNDO }, v3 = {2,1,SEM_UNDO};
 static int shm1, shm2, shm3, sem_id;
+
+extern int fd_key, fd_sw;
 
 void getseg(int **sh1, int **sh2, struct outbuf** sh3){ // init
 	/*create shared mem*/
@@ -86,21 +88,12 @@ void proc_in(int semid, int *buf_in){
 	/* input process */
 
 	struct input_event ev[BUFF_SIZE];
-    int fd_key, rd, value, size = sizeof(struct input_event);
+    int rd, value, size = sizeof(struct input_event);
 	
 	unsigned char push_sw_buff[MAX_BUTTON];
-	int i, fd_sw, size_sw;
-
-	char *dev_key = "/dev/input/event0";
-	char *dev_sw = "/dev/fpga_push_switch";
-    if ((fd_key = open(dev_key, O_RDONLY | O_NONBLOCK)) == -1) {
-        printf("%s is not a vaild device \\n", dev_key);
-    }
-	if ((fd_sw = open(dev_sw, O_RDWR ))== -1) {
-		printf("%s is not a vaild device \n", dev_sw);
-		close(fd_sw);
-	}
+	int i, size_sw;
 	int flag = 0;
+
 	size_sw = sizeof(push_sw_buff);
 	while(1){
 		//printf("read %d\n", *buf_in);
@@ -143,27 +136,34 @@ void proc_in(int semid, int *buf_in){
 
 void proc_main(int semid, int *buf_in, int *buf_mode, struct outbuf *buf_out){
 	/* main process */
+
+
 	int sw = SW1;
 	int inflag = 0;
 	*buf_in = 0;
 
-	/*init clock data*/
 	struct clock_data clock_info;
+	struct counter_data counter_info;
+	struct text_editor_data text_editor_info;
+	struct draw_board_data draw_board_info;
+
+	/*init clock data*/
 	clock_info.clock_h =0;
 	clock_info.clock_m =0;
 	clock_info.clock_mode = 0;
 
 	/*init counter data*/
-	struct counter_data counter_info;
 	counter_info.number = 0;
 	counter_info.system = 10;
 
 	/*init text editor data*/
-	struct text_editor_data text_editor_info;
 	text_editor_info.cnt = 0;
 	text_editor_info.mode = TEXT_ENG_MODE;
-	memset(text_editor_info.text , 0, 9);
+	memset(text_editor_info.text , 0, MAX_TEXT_LCD);
 	text_editor_info.idx = 0;
+
+	/*init draw board data*/
+    init_draw_board_info(&draw_board_info);
 
 	while(1){
 		inflag = 1;
@@ -202,11 +202,11 @@ void proc_main(int semid, int *buf_in, int *buf_mode, struct outbuf *buf_out){
 				mode_text_editor(sw,inflag, &(text_editor_info), buf_out);
 				break;
             case 4:
+				mode_draw_board(sw,inflag,&(draw_board_info), buf_out);
                 break;
         }
 
 		char tmp[4] = "out\0";
-
 		*buf_in = 0;
 		semop(semid, &p2,1);
 		if(inflag == 1){
@@ -222,35 +222,15 @@ void proc_out(int semid, int *buf_mode, struct outbuf* buf_out){
 	while(1){
 		char nullstr[16];
 		memset(nullstr, 0, 16);
-		
-		switch(*buf_mode){
-			case 1:
-				printf("CLOCK OUT: %d %s\n",buf_out->led, buf_out->fnd);
-				led(buf_out->led);
-				fnd(buf_out->fnd);
-				dot_matrix(buf_out->dot_matrix);
-				text_lcd(buf_out->text_lcd);
-				break;
 
-			case 2:
-				printf("CLOCK OUT: %d %s\n",buf_out->led, buf_out->fnd);
-				led(buf_out->led);
-				fnd(buf_out->fnd);
-				dot_matrix(buf_out->dot_matrix);
-				text_lcd(buf_out->text_lcd);
-				break;
-			case 3:
-				led(buf_out->led);
-				fnd(buf_out->fnd);
-				dot_matrix(buf_out->dot_matrix);
-				text_lcd(buf_out->text_lcd);
-				break;
-			default:
-				break;
-		}
+		led(buf_out->led);
+		fnd(buf_out->fnd);
+		dot_matrix(buf_out->dot_matrix);
+		text_lcd(buf_out->text_lcd);
 		
 		semop(semid, &v2, 1);
-		sleep(1);
+		usleep(10000);
+		
 	}
 }
 
@@ -272,6 +252,7 @@ int main (int argc, char *argv[])
 	getseg (&buf_in, &buf_mode, &buf_out);	//create and attach shared mem 
 	init_buf(buf_in, buf_mode, buf_out);
 	device_open();
+
 	/* create child processes */
 	switch(pid_in = fork()){
 		case -1:

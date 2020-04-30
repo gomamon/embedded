@@ -36,37 +36,39 @@ void mode_draw_board(int sw, int inflag, struct draw_board_data *draw_board_info
                 init_draw_board_info(draw_board_info);
                 break;
             case SW2:   // UP
-                /* move cursor y to up and increase count*/
+                /* move cursor y to up and increase counter*/
                 (cur_cury)--;
                 draw_board_info->cursor_y = (cur_cury < 0) ? 0 : cur_cury;
                 draw_board_info->cnt++;
                 break;
             case SW3:   // cursor ON/OFF
-                /* change cursor mode and increase count */
+                /* change cursor mode and increase counter */
                 if(draw_board_info->cursor_on == CURSOR_OFF)
                     draw_board_info->cursor_on = CURSOR_ON;
                 else draw_board_info->cursor_on = CURSOR_OFF;
                 draw_board_info->cnt++;
                 break;
             case SW4:   //LEFT
-                /* change cursor x to left and increase count */
+                /* change cursor x to left and increase counter */
                 cur_curx--;
                 draw_board_info->cursor_x = (cur_curx < 0) ? 0 : cur_curx;
                 draw_board_info->cnt++;
                 break;
             case SW5:   // SELECT
-                /* draw dot by coordiate of cursor and increase count*/
-                (draw_board_info->board_map)[cur_cury][cur_curx] = 1;
+                /* draw dot or remove dot by coordiate of cursor and increase counter*/
+                if((draw_board_info->board_map)[cur_cury][cur_curx] == 0)
+                    (draw_board_info->board_map)[cur_cury][cur_curx] = 1;
+                else (draw_board_info->board_map)[cur_cury][cur_curx] = 0;
                 draw_board_info->cnt++;
                 break;
             case SW6:
-                /* change cursor x to right and incrase count */
+                /* change cursor x to right and incrase counter */
                 cur_curx++;
                 draw_board_info->cursor_x = (cur_curx > 6) ? 6 : cur_curx;
                 draw_board_info->cnt++;
                 break;
             case SW7:   //clear
-                /* clear map and increase count*/
+                /* clear map and increase counter*/
                 for (i = 0; i < 10; i++){
                     for(j=0; j< 7; j++){
                         (draw_board_info->board_map)[i][j] = 0;
@@ -75,13 +77,13 @@ void mode_draw_board(int sw, int inflag, struct draw_board_data *draw_board_info
                 draw_board_info->cnt++;
                 break;
             case SW8:   //DOWN
-                /* change cursor to down and increase count */
+                /* change cursor to down and increase counter */
                 (cur_cury)++;
                 draw_board_info->cursor_y = (cur_cury > 9) ? 9 : cur_cury;
                 draw_board_info->cnt++;
                 break;
             case SW9: //reverse
-                /* reverse dot in board ( 0->1 , 1->0 ) and increase count */
+                /* reverse dot in board ( 0->1 , 1->0 ) and increase counter */
                 for (i = 0; i < 10; i++){
                     for(j=0; j< 7; j++){
                         (draw_board_info->board_map)[i][j] = ((draw_board_info->board_map)[i][j] == 1) ? 0 : 1;

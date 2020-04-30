@@ -51,6 +51,21 @@ void device_open(){
 }
 
 void device_close(){
+	int i;
+	unsigned char empty_fnd_data[MAX_FND];
+	unsigned char empty_dot_matrix_data[MAX_DOT_MATRIX];
+	unsigned char emtpy_text_lcd_data[MAX_TEXT_LCD];
+	
+	sprintf(empty_fnd_data, "0000");
+	for(i=0; i<MAX_DOT_MATRIX; i++)	empty_dot_matrix_data[i] = 0x00;
+	sprintf(emtpy_text_lcd_data, "");
+
+	led(0);
+	fnd(empty_fnd_data);
+	dot_matrix(empty_dot_matrix_data);
+	text_lcd(emtpy_text_lcd_data);
+
+
 	/*close all devices*/
 	close(dev_key);
 	close(dev_sw);

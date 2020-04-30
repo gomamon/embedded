@@ -207,8 +207,6 @@ void proc_out(int semid, struct outbuf* buf_out){
 	/* output process */
 	char *tmp;
 	while(1){
-		char nullstr[16];
-		memset(nullstr, 0, 16);
 
 		led(buf_out->led);
 		fnd(buf_out->fnd);
@@ -260,7 +258,9 @@ int main ()
 
 					/* kill chid processes, remove semaphore and close devices  */
 					kill(pid_in, SIGKILL);
+					wait(NULL);
 					kill(pid_out,SIGKILL);
+					wait(NULL);
 					remobj();
 					device_close();
 					break;

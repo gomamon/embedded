@@ -29,8 +29,6 @@ void getseg(int **sh1, struct outbuf** sh2){ // init
 		perror("error shmget\n");
 		exit(1);
 	}
-
-	puts("getseg!!");
 }
 
 int getsem(){
@@ -38,34 +36,34 @@ int getsem(){
 	x.val = 0;
 	int id = -1;
 
-	puts("start getsem!!");
+	/* create semaphore and get semaphore id*/
 	if ((id = semget (SEM_KEY, 3, IPC_CREAT)) == -1){
-		puts("getsem1!!");
+		perror("error semget");
 		exit(1);	
 	} 
 
+	/* initialize semaphore */
 	if (semctl (id, 0, SETVAL, x) == -1){	
-		puts("getsem2!!");
+		perror("error semget");
 		exit(1);
 	}
 
 	if (semctl (id, 1, SETVAL, x) == -1){			
-		puts("getsem3!!");
+		perror("error semget");
 		exit(1);	
 	}
 
 	if (semctl (id, 2, SETVAL, x) == -1){				
-		puts("getsem4!!");
+		perror("error semget");
 		exit(1);
 	}
 
-	puts("end getsem!!");
 	return (id);
 }
 
 void remobj(){
 
-	/* remove shm */
+	/* remove shared memory */
 	if (shmctl(shm1, IPC_RMID, 0) == -1) exit(1);
 	if (shmctl(shm2, IPC_RMID, 0) == -1) exit(1);
 
@@ -75,23 +73,29 @@ void remobj(){
 
 
 void init_buf(int *buf_in, struct outbuf* buf_out){
+	/* initialze shared memory buffer*/
+	int i=0;
 	*buf_in = 0;
-	memset(buf_out->text_lcd, 0, MAX_TEXT_LCD); 
+	for(i=0; i<MAX_TEXT_LCD; i++) buf_out->text_lcd[i] = 0;
 }	
 
 void proc_in(int semid, int *buf_in){
 	/* input process */
 
+	/* for key */
 	struct input_event ev[BUFF_SIZE];
     int rd, value, size = sizeof(struct input_event);
 	
+	/* for switch */
 	unsigned char push_sw_buff[MAX_BUTTON];
 	int i, size_sw;
-	int flag = 0;
+	int flag = 0; //flag for checking key or switch pressed
 
 	size_sw = sizeof(push_sw_buff);
 	while(1){
 		usleep(250000);
+
+		/* read KEY */
 		if((rd = read(dev_key, ev, size * BUFF_SIZE)) >= size){
 			value = ev[0].value;
 			if(value == KEY_PRESS){
@@ -106,6 +110,7 @@ void proc_in(int semid, int *buf_in){
 			}
 		}
 		else{
+			/* read SWITCH */
 			read(dev_sw, &push_sw_buff, size_sw);
 			int btn=0;
 			for( i=0; i<MAX_BUTTON;i++){
@@ -117,10 +122,10 @@ void proc_in(int semid, int *buf_in){
 			}
 			*buf_in = btn;
 		}
+
+		/*SEMA p1 : If has input, wait until main process to finish processing the input*/
 		if(flag == 1){
-			printf("wait %d\n", *buf_in);
 			semop(semid, &p1, 1);
-			printf("release! %d\n", *buf_in);
 			flag = 0;
 		}
 	}
@@ -130,9 +135,8 @@ void proc_in(int semid, int *buf_in){
 void proc_main(int semid, int *buf_in, struct outbuf *buf_out){
 	/* main process */
 
-
-	int sw = SW1;
-	int inflag = 0;
+	int sw = SW1;	//variable to save input type
+	int inflag = 0;		
 	*buf_in = 0;
 	int mode = 1;
 
@@ -154,48 +158,60 @@ void proc_main(int semid, int *buf_in, struct outbuf *buf_out){
     init_draw_board_info(&draw_board_info);
 
 	while(1){
-		inflag = 1;
+		inflag = 1; // flag for checking input existance
 		
-		// printf("main! %d", *buf_in);
+		/* check input */
 		switch(*buf_in){
 			case (KEY_VOL_DOWN*10):
+				/* VOL+ : change mode  and set sw*/
 				mode = (mode>1)? mode-1 : 4;
-				sw = 1<<9;
+				sw = KEY_VOL;
 				break;
 			case (KEY_VOL_UP*10):
+				/* VOL- : change mode and set sw*/
 				mode = (mode<4)? mode+1 : 1;
-				sw = 1<<9;
+				sw = KEY_VOL;
 				break;
 			case (KEY_BACK*10):
+				/* BACK : return for end this program */
 				return;
 				break;
 			case 0 :
+				/* no input : change inflag to 0 */
 				inflag = 0;
 				break;
             default:
+				/* SWITCH 0~9 or mutiple : set sw to switch input number*/
                 sw = *buf_in;
-                printf("sw: %d\n", sw);
                 break;
         }
-		printf("mode : %d\n",mode);
+
+		/* Set output buffer by mode */
         switch (mode) {
             case 1:
+				/* clock mode */
                 mode_clock(sw, inflag, &(clock_info), buf_out);
                 break;
             case 2:
+				/* counter mode */
 				mode_counter(sw, inflag, &(counter_info), buf_out);
 				break;
 			case 3:
+				/* text editor mode */
 				mode_text_editor(sw,inflag, &(text_editor_info), buf_out);
 				break;
             case 4:
+				/* draw board mode */
 				mode_draw_board(sw,inflag,&(draw_board_info), buf_out);
                 break;
         }
 
-		char tmp[4] = "out\0";
-		*buf_in = 0;
+		*buf_in = 0; //initializing input buffer
+
+		/* SEM p2 : signal to sema2 for input process*/
 		semop(semid, &p2,1);
+
+		/* SEM v1: If has input, wait until output end */
 		if(inflag == 1){
 			semop(semid, &v1, 1);
 		}
@@ -208,11 +224,13 @@ void proc_out(int semid, struct outbuf* buf_out){
 	char *tmp;
 	while(1){
 
+		/* device print data by output buffer */
 		led(buf_out->led);
 		fnd(buf_out->fnd);
 		dot_matrix(buf_out->dot_matrix);
 		text_lcd(buf_out->text_lcd);
 		
+		/* SEM v2 : signal to sema 1 for main process */
 		semop(semid, &v2, 1);
 		usleep(10000);
 		

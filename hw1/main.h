@@ -52,8 +52,6 @@
 #define SW9 1
 #define KEY_VOL 1<<9
 
-/**/
-//#define MODE_NUM 4
 
 /* device */
 #define MAX_BUTTON 9

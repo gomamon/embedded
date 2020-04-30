@@ -1,9 +1,10 @@
+/* struct data for counter */
 struct counter_data {
-	int number;
-    int system;
+	int number; //number
+    int system; //numerial system
 };
 
-
+/* numerial system */
 #define CNT_BIN 1
 #define CNT_DEC 2
 #define CNT_OCT 3

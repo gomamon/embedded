@@ -4,11 +4,14 @@
 #include "devices.h"
 #include "textEditor.h"
 #include "drawBoard.h"
+
+/* semaphore and shared memory */
 struct sembuf p1 = {0, -1, SEM_UNDO }, p2 = {1, -1, SEM_UNDO}, p3 = {2, -1, SEM_UNDO};
 struct sembuf v1 = {0, 1, SEM_UNDO }, v2 = {1, 1, SEM_UNDO }, v3 = {2,1,SEM_UNDO};
 static int shm1, shm2, sem_id;
 
-extern int dev_key, dev_sw;
+/* device on descriptor */
+extern int dev_key, dev_sw; 
 
 void getseg(int **sh1, struct outbuf** sh2){ // init
 	/*create shared mem*/
@@ -135,6 +138,7 @@ void proc_in(int semid, int *buf_in){
 void proc_main(int semid, int *buf_in, struct outbuf *buf_out){
 	/* main process */
 
+	/*initializing data*/
 	int sw = SW1;	//variable to save input type
 	int inflag = 0;		
 	*buf_in = 0;
@@ -253,6 +257,7 @@ int main ()
 	/* create child processes */
 	switch(pid_in = fork()){
 		case -1:
+			/* fork error */
 			perror("ERROR: fork()");
 			break;
 		case 0:
@@ -263,6 +268,7 @@ int main ()
 		default:
 			switch(pid_out = fork()){
 				case -1:
+					/* fork error */
 					perror("ERROR: fork()");
 					break;
 				case 0:
@@ -271,16 +277,17 @@ int main ()
 					remobj();
 					break;
 				default:
+				
 					/* main process */
 					proc_main(sem_id, buf_in, buf_out);
 
 					/* kill chid processes, remove semaphore and close devices  */
-					kill(pid_in, SIGKILL);
-					wait(NULL);
-					kill(pid_out,SIGKILL);
-					wait(NULL);
-					remobj();
-					device_close();
+					kill(pid_in, SIGKILL); 	//kill input process
+					wait(NULL);				//wait until finish killing input process
+					kill(pid_out,SIGKILL); 	//kill output process
+					wait(NULL);				//wait until finish killing output process
+					remobj();				//remove semaphore and shared memory
+					device_close();			//close all devices
 					break;
 			}
 			break;

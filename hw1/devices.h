@@ -32,15 +32,17 @@
 #define LINE_BUFF 16
 #define FPGA_TEXT_LCD_DEVICE "/dev/fpga_text_lcd"
 
-
+/*device open descripter of key and switch*/
 int dev_key;
 int dev_sw;
 
+/* device control function */
 void led(unsigned char data);
 void fnd(char *str_data);
 void dot_matrix(unsigned char* data);
 void text_lcd(unsigned char *data);
 
+/* device open and close */
 void device_open();
 void device_close();
 

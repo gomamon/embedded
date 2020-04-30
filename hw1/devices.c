@@ -12,13 +12,13 @@ void device_open(){
 
 	/* input key */
     if ((dev_key = open(DEV_KEY, O_RDONLY | O_NONBLOCK)) == -1) {
-        printf("/dev/input/event0 is not a vaild device \n");
+        perror("/dev/input/event0 is not a vaild device \n");
 		exit(1);
     }
 
 	/* switch */
 	if ((dev_sw = open(DEV_SW, O_RDWR ))== -1) {
-		printf("/dev/fpga_push_switch is not a vaild device \n");
+		perror("/dev/fpga_push_switch is not a vaild device \n");
 		exit(1);
 	}
 
@@ -32,20 +32,20 @@ void device_open(){
 	/* fnd */
 	dev_fnd = open(FND_DEVICE, O_RDWR);
 	if(dev_fnd<0){
-		printf("Devices open error : %s\n",FND_DEVICE);
+		perror("Devices open error : fnd\n");
 	}
 
 	/* dot_matrix */
 	dev_dot = open(FPGA_DOT_DEVICE, O_WRONLY);
 	if (dev_dot<0) {
-		printf("Device open error : %s\n",FPGA_DOT_DEVICE);
+		perror("Device open error : dot device\n");
 		exit(1);
 	}
 
 	/*text lcd*/
 	dev_text_lcd = open(FPGA_TEXT_LCD_DEVICE, O_WRONLY);
 	if ( dev_text_lcd<0) {
-		printf("Device open error : %s\n",FPGA_TEXT_LCD_DEVICE);
+		perror("Device open error : text lcd device\n");
 		exit(1);
 	}
 }
@@ -56,10 +56,12 @@ void device_close(){
 	unsigned char empty_dot_matrix_data[MAX_DOT_MATRIX];
 	unsigned char emtpy_text_lcd_data[MAX_TEXT_LCD];
 	
+	/*create empty string by device*/
 	sprintf(empty_fnd_data, "0000");
 	for(i=0; i<MAX_DOT_MATRIX; i++)	empty_dot_matrix_data[i] = 0x00;
 	sprintf(emtpy_text_lcd_data, "");
 
+	/* reset device */
 	led(0);
 	fnd(empty_fnd_data);
 	dot_matrix(empty_dot_matrix_data);
@@ -82,16 +84,19 @@ void led(unsigned char data)
 	unsigned long *fpga_addr = 0;
 	unsigned char *led_addr =0;
 
+	//get fpga address 
 	fpga_addr = (unsigned long *)mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, dev_led, FPGA_BASE_ADDRESS);
 	if (fpga_addr == MAP_FAILED)
 	{
-		printf("mmap error!\n");
+		perror("mmap error!\n");
 		close(dev_led);
 		exit(1);
 	}
 	
+	//get led address
 	led_addr=(unsigned char*)((void*)fpga_addr+LED_ADDR);
 	
+	//intput data to led address to turn on the led
 	*led_addr=data; 
 	data=0;
 	data=*led_addr; 
@@ -113,7 +118,7 @@ void fnd(char *str_data)
         data[i]=str_data[i]-0x30;
 	}
 
-
+	//show data using fnd device driver
     retval=write(dev_fnd,&data,4);	
     if(retval<0) {
         printf("Write Error!\n");
@@ -128,9 +133,7 @@ void fnd(char *str_data)
 void dot_matrix(unsigned char* data)
 {
 	int i;
-
-	printf("dot: %s\n",data);
-
+	//show data using dot matrix device driver
 	write(dev_dot,data,10);
 	
 	return;
@@ -156,10 +159,12 @@ void text_lcd(unsigned char *str_data)
 		string[i] = str_data[i];
 	}
 
+	// make remain text empty
 	if(tok_size>=0){
 		memset(string+tok_size, ' ', 32-tok_size);
 	}
 
+	// show text using text lcd driver
 	write( dev_text_lcd,string,MAX_BUFF);		
 	return;
 }

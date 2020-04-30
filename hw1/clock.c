@@ -3,6 +3,20 @@
 
 
 void mode_clock(int sw, int inflag, struct clock_data *clock_info, struct outbuf* buf_out){
+    /* 
+        MODE 1 : Clock Mode
+        * Set to output buffer for showing time 
+        * or modify the time 
+        * 
+        * <parameter>
+        * sw : input switch code
+        * inflag : check exist input
+        * clock_info : save the clock information
+        * buf_out: output buffer to control devices (shared mem)   
+    */
+    
+
+
     
     /* variable for system time */
     struct tm *tm;
@@ -21,12 +35,12 @@ void mode_clock(int sw, int inflag, struct clock_data *clock_info, struct outbuf
             case SW1:  
                 /*changes clock mode*/
                 switch (clock_info->clock_mode) {
-                    case CLOCK_SHOW:
+                    case CLOCK_SHOW:    //clock showing mode
                         clock_info->clock_mode=CLOCK_MODI;
                         clock_info->unsaved_h = ((tm->tm_hour+clock_info->clock_h)+(tm->tm_min+clock_info->clock_m)/60)%24;
                         clock_info->unsaved_m = (tm->tm_min+clock_info->clock_m)%60 ;
                         break;
-                    case CLOCK_MODI:
+                    case CLOCK_MODI:    //modifying mode
                         clock_info->clock_mode=CLOCK_SHOW;
                         clock_info->clock_h = clock_info->unsaved_h - tm->tm_hour;
                         clock_info->clock_m = clock_info->unsaved_m - tm->tm_min;

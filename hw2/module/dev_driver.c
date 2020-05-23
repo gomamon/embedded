@@ -69,7 +69,7 @@ static void iomap_fpga(){
 	fpga_addr.text_lcd = ioremap(PHY_TEXT_LCD,0x32);
 }
 
-static void iounmap_fpag(){
+static void iounmap_fpga(){
 	iounmap(fpga_addr.led);
 	iounmap(fpga_addr.fnd);
 	iounmap(fpga_addr.dot);
@@ -191,7 +191,7 @@ void __exit dev_driver_exit(void){
 	printk("device_driver_exit\n");
 	dev_driver_usage = 0;
 	del_timer_sync(&mydata.timer);
-	iounmap_fpag();
+	iounmap_fpga();
 	unregister_chrdev(MAJOR_NUM, DEVICE_DRIVER_NAME);
 }
 

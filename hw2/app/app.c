@@ -46,7 +46,7 @@ int main(int argc, char **argv)
 	}
 
 	init = atoi(argv[3]);
-	if(!(1<=interval && interval <=100)){
+	if(!(1<=interval && interval <=8000)){
 		perror("TIMER_INIT[0001-8000]\n");
 		return -1;
 	}

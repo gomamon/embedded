@@ -42,7 +42,6 @@ void iomap_fpga(void);
 void iounmap_fpga(void);
 void fpga_clear(void);
 
-int timer_flag = 0; //flag for timer
 int count = 0;
 
 unsigned char text1[17] = "20161622";

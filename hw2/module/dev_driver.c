@@ -42,7 +42,7 @@ void iomap_fpga(void);
 void iounmap_fpga(void);
 void fpga_clear(void);
 
-
+int timer_flag = 0; //flag for timer
 int count = 0;
 
 unsigned char text1[17] = "20161622";
@@ -142,7 +142,6 @@ long dev_driver_ioctl(struct file *file, unsigned int ioctl_num, unsigned long i
 			* set timer and start count  	
 			*/
 			printk("dev_driver ioctl command\n");
-			init_timer(&(mydata.timer)); //initailize timer
 			timer_setup();	//setup timer parameter and start count
 			break;
 		default:
@@ -334,6 +333,7 @@ int __init dev_driver_init(void){
 		return major_number;
 	}
 
+	init_timer(&(mydata.timer)); //initailize timer
 	iomap_fpga(); // iomap fpga devices
 	printk("dev_file: /dev/%s , major: %d\n", DEVICE_DRIVER_NAME, MAJOR_NUM);
 	printk("init module\n");

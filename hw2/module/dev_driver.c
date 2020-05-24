@@ -326,7 +326,7 @@ int dev_driver_release(struct inode *inode, struct file *file) {
 int __init dev_driver_init(void){
 	/* initialize module */
 	int major_number;
-	printk("device_driver_init\n");
+	printk("dev_driver_init\n");
 
 	major_number = register_chrdev(MAJOR_NUM, DEVICE_DRIVER_NAME, &fops);
 	if(major_number < 0){
@@ -342,7 +342,7 @@ int __init dev_driver_init(void){
 
 void __exit dev_driver_exit(void){
 	/* exit module */
-	printk("device_driver_exit\n");
+	printk("dev_driver_exit\n");
 	dev_driver_usage = 0;	//unset usage counter
 	del_timer_sync(&mydata.timer);	//delete timer
 	iounmap_fpga();	//iounmap fpga address

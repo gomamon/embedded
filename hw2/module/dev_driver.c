@@ -24,7 +24,7 @@
 
 #define COMMAND_SIZE 12
 
-static dev_driver_usage = 0;
+static int dev_driver_usage = 0;
 
 long number = 0;
 int major_number;
@@ -42,6 +42,7 @@ static void timer_handler(unsigned long);
 unsigned char text1[17] = "20161622";
 unsigned char text2[17] = "YEEUN LEE";
 int text1_pos = 0, text2_pos = 0;
+int text1_dir = 0, text2_dir = 0;
 
 static struct file_operations fops = {
 	.open = dev_driver_open,
@@ -120,7 +121,6 @@ long dev_driver_ioctl(struct file *file, unsigned int ioctl_num, unsigned long i
 			}
 			text1_pos=0;
 			text2_pos=0;
-			//printk("param int : %d %d %d\n",mydata.interval, mydata.count, mydata.init);
 			break;
 		case IOCTL_COMMAND:
 			printk("IOCTL COMMAND");
@@ -179,26 +179,13 @@ int fpga_handler(struct timer_data *t_data){
 	}
 
 	/* text lcd write*/
-	for(i=0; i<32; i++)
-	{
-		if(i<16){
-			if(i>=text1_pos){
-				text_lcd_data[i] = text1[text1_pos+i];
-			}
-			else if(text1_pos+8 >16){
-				text_lcd_data[i] 
-			}
-			else
-				text_lcd_data[i] = ' ';
-		}
-		else{
-			if(0<=(i-16)-text2_pos && (i-16)-text2_pos < 9)
-				text_lcd_data[i] = text2[text2_pos+(i-16)];
-			else
-			
-				text_lcd_data[i] = ' ';
-		}
+	for(i=0; i<32; i++)	text_lcd_data[i] = ' ';
+	for(i=0; i< 8; i++){
+		text_lcd_data[i+text1_pos]=text1[i];
+		text_lcd_data[16+(i+text2_pos)] = text2[i];
 	}
+	text_lcd_data[16+(8+text2_pos)]=text2[8];
+
 	for(i=0;i<32;i++)
     {
         text_lcd_value = (text_lcd_data[i] & 0xFF) << 8 | text_lcd_data[i + 1] & 0xFF;
@@ -206,10 +193,34 @@ int fpga_handler(struct timer_data *t_data){
         i++;
     }
 
-
 	return 0;
 }
 
+void fpga_clear(){
+	int i;
+	unsigned char c = ' ';
+	unsigned short int text_lcd_value = 0;
+
+	/* led clear */
+	outw(0, (unsigned int)fpga_addr.led);
+
+	/* fnd clear */
+	outw(0, (unsigned int)fpga_addr.fnd);
+	
+	/* dot clear */
+	for(i=0; i<10 ; i++){
+		outw(fpga_set_blank[i], (unsigned int)fpga_addr.dot+i*2);
+	}
+
+	/* text lcd clear*/
+	for(i=0;i<32;i++)
+    {
+        text_lcd_value = (c & 0xFF) << 8 | c & 0xFF;
+		outw(text_lcd_value,(unsigned int)fpga_addr.text_lcd+i);
+        i++;
+    }
+
+}
 
 static void timer_handler(unsigned long timeout){
 	struct timer_data *t_data = (struct timer_data*)timeout;
@@ -218,8 +229,27 @@ static void timer_handler(unsigned long timeout){
 	if(fpga_handler(t_data) == -1)
 		return;
 
+	if(text1_dir == 0) text1_pos++;
+	else if(text1_dir == 1) text1_pos--;
+	if(text1_pos+8 >= 16){
+		text1_dir = 1;
+	}
+	else if(text1_pos <= 0 ){
+		text1_dir = 0;
+	}
+
+	if(text2_dir == 0) text2_pos++;
+	else if(text2_dir == 1) text2_pos--;
+	if(text2_pos+9 >= 16){
+		text2_dir = 1;
+	}
+	else if(text2_pos <= 0 ){
+		text2_dir = 0;
+	}
+
 	t_data->count++;
 	t_data->init++;
+	
 	if(t_data->init > 8) t_data->init = 1;
 	
 	if((t_data->count)%8 == 0)
@@ -227,6 +257,7 @@ static void timer_handler(unsigned long timeout){
 	if(t_data->init_pos == 4) t_data->init_pos = 0;
 
 	if(t_data -> count > count ){
+		fpga_clear();
 		return ;
 	}
 	
@@ -273,6 +304,7 @@ int __init dev_driver_init(void){
 }
 
 void __exit dev_driver_exit(void){
+
 	printk("device_driver_exit\n");
 	dev_driver_usage = 0;
 	del_timer_sync(&mydata.timer);

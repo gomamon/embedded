@@ -159,7 +159,7 @@ void timer_setup(){
 	del_timer_sync(&mydata.timer);	//delete before timer
 	
 	/*set timer inforamtion*/
-	mydata.timer.expires = jiffies + (mydata.interval *HZ);
+	mydata.timer.expires = jiffies + (mydata.interval*HZ)/10;
 	mydata.timer.data = (unsigned long)&mydata;
 	mydata.timer.function = timer_handler;
 
@@ -292,7 +292,7 @@ void timer_handler(unsigned long timeout){
 	}
 
 	/* set timer information */
-	mydata.timer.expires = get_jiffies_64() + (mydata.interval * HZ);
+	mydata.timer.expires = get_jiffies_64() + (mydata.interval*HZ)/10;
 	mydata.timer.data = (unsigned long)&mydata;
 	mydata.timer.function = timer_handler;
 

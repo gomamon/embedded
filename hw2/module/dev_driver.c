@@ -36,8 +36,14 @@ int count = 0;
 int dev_driver_open(struct inode *,struct file *);
 int dev_driver_release(struct inode *, struct file *);
 long dev_driver_ioctl(struct file *, unsigned int, unsigned long);
-static void timer_setup();
-static void timer_handler(unsigned long);
+
+void timer_setup(void);
+void timer_handler(unsigned long);
+
+void iomap_fpga(void);
+void iounmap_fpga(void);
+void fpga_clear(void);
+
 
 unsigned char text1[17] = "20161622";
 unsigned char text2[17] = "YEEUN LEE";
@@ -54,10 +60,9 @@ static struct timer_data{
 	int interval;
 	int init;
 	int init_pos;
-	int count;
-	
+	int count;	
 	struct timer_list timer;
-};
+} mydata;
 
 static struct fpga_virtual_address{
 	unsigned char *led;
@@ -66,17 +71,17 @@ static struct fpga_virtual_address{
 	unsigned char *text_lcd;
 } fpga_addr;
 
-struct timer_data mydata;
+// struct timer_data mydata;
 
 
-static void iomap_fpga(){
+void iomap_fpga(){
 	fpga_addr.led = ioremap(PHY_LED, 0x1);
 	fpga_addr.fnd = ioremap(PHY_FND, 0x4);
 	fpga_addr.dot = ioremap(PHY_DOT,0x10);
 	fpga_addr.text_lcd = ioremap(PHY_TEXT_LCD,0x32);
 }
 
-static void iounmap_fpga(){
+void iounmap_fpga(){
 	iounmap(fpga_addr.led);
 	iounmap(fpga_addr.fnd);
 	iounmap(fpga_addr.dot);
@@ -87,7 +92,7 @@ static void iounmap_fpga(){
 long dev_driver_ioctl(struct file *file, unsigned int ioctl_num, unsigned long ioctl_param){
 	int i;
 	char *temp;
-
+	int tmp;
 	char buff[12] = {'\0',};
 	printk("device_driver_ioctl\n");
 
@@ -103,7 +108,7 @@ long dev_driver_ioctl(struct file *file, unsigned int ioctl_num, unsigned long i
 			for(i=0; i<COMMAND_SIZE; i++){
 				get_user(buff[i], temp+i);
 				if(buff[i]<'0'||buff[i]>'9') break;
-				int tmp  = buff[i]-'0';
+				tmp = (int)buff[i]-'0';
 				if(i<3){
 					mydata.interval *=10;
 					mydata.interval += tmp;
@@ -119,8 +124,8 @@ long dev_driver_ioctl(struct file *file, unsigned int ioctl_num, unsigned long i
 					}
 				}
 			}
-			text1_pos=0;
-			text2_pos=0;
+			text1_pos = 0;	text2_pos = 0;
+			text1_dir = 0;	text2_dir = 0;
 			break;
 		case IOCTL_COMMAND:
 			printk("IOCTL COMMAND");
@@ -133,10 +138,10 @@ long dev_driver_ioctl(struct file *file, unsigned int ioctl_num, unsigned long i
 			return -1;
 			break;
 	}
-
+	return 0;
 }
 
-static void timer_setup(){
+void timer_setup(){
 
 	del_timer_sync(&mydata.timer);
 	
@@ -188,7 +193,7 @@ int fpga_handler(struct timer_data *t_data){
 
 	for(i=0;i<32;i++)
     {
-        text_lcd_value = (text_lcd_data[i] & 0xFF) << 8 | text_lcd_data[i + 1] & 0xFF;
+        text_lcd_value = (text_lcd_data[i] & 0xFF) << 8 | ( text_lcd_data[i + 1] & 0xFF);
 		outw(text_lcd_value,(unsigned int)fpga_addr.text_lcd+i);
         i++;
     }
@@ -215,14 +220,15 @@ void fpga_clear(){
 	/* text lcd clear*/
 	for(i=0;i<32;i++)
     {
-        text_lcd_value = (c & 0xFF) << 8 | c & 0xFF;
+        // text_lcd_value = ((c & 0xFF) << 8) | (c & 0xFF);
+		text_lcd_value = (c & 0xFF) << 8 | (c & 0xFF) ;
 		outw(text_lcd_value,(unsigned int)fpga_addr.text_lcd+i);
         i++;
     }
 
 }
 
-static void timer_handler(unsigned long timeout){
+void timer_handler(unsigned long timeout){
 	struct timer_data *t_data = (struct timer_data*)timeout;
 	printk("timer handler %d\n", t_data->count);
 

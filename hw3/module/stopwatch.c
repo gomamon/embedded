@@ -88,7 +88,7 @@ void timer_handler(unsigned long timeout){
 	struct timer_data *t_data = (struct timer_data*)timeout;
 	printk("time %d \n", t_data->cnt);
 	(t_data->cnt)++;
-
+	(t_data->cnt)%(60*60*DECIMAL_SEC);
 	fnd_write(t_data->cnt);
 
 	mydata.timer.expires = get_jiffies_64() + HZ/DECIMAL_SEC;
@@ -109,7 +109,13 @@ void timer_setup(void){
 	return;
 }
 
-
+void data_init(void){
+	if(mydata.status == STATUS_SET)
+		del_timer(&mydata.timer);
+	mydata.status = STATUS_UNSET;
+	mydata.cnt = 0;
+	fnd_write(mydata.cnt);
+}
 
 irqreturn_t stopwatch_handler1(int irq, void* dev_id, struct pt_regs* reg) {
 	printk(KERN_ALERT "HOME! = %x\n", gpio_get_value(IMX_GPIO_NR(1, 11)));
@@ -132,14 +138,8 @@ irqreturn_t stopwatch_handler2(int irq, void* dev_id, struct pt_regs* reg) {
 
 irqreturn_t stopwatch_handler3(int irq, void* dev_id,struct pt_regs* reg) {
 	printk(KERN_ALERT "VOL UP! = %x\n", gpio_get_value(IMX_GPIO_NR(2, 15)));
-	
-	if(mydata.status == STATUS_SET)
-		del_timer(&mydata.timer);
-	mydata.status = STATUS_UNSET;
 
-	mydata.cnt = 0;
-	fnd_write(mydata.cnt);
-	
+	data_init();
 	return IRQ_HANDLED;
 }
 
@@ -150,13 +150,10 @@ irqreturn_t stopwatch_handler4(int irq, void* dev_id, struct pt_regs* reg) {
 		vol_down_jiffies = get_jiffies_64();
 		vol_down_status = 1;
 	}else{
-		
-		if(vol_down_jiffies - get_jiffies_64() >= 3000){
+		if( get_jiffies_64()-vol_down_jiffies >= 3*HZ){
 			__wake_up(&wq_write, 1, 1, NULL);
 			printk("wake up\n");
 		}
-	 	vol_down_status = 0;
-		vol_down_jiffies = 0;
 	}
 
 	return IRQ_HANDLED;
@@ -197,12 +194,7 @@ static int stopwatch_open(struct inode *minode, struct file *mfile){
 
 static int stopwatch_release(struct inode *minode, struct file *mfile){
 
-	if(mydata.status == STATUS_SET)
-		del_timer(&mydata.timer);
-		mydata.status = STATUS_UNSET;
-
-	mydata.cnt =0;
-	fnd_write(mydata.cnt);
+	data_init();
 
 	free_irq(gpio_to_irq(IMX_GPIO_NR(1, 11)), NULL);
 	free_irq(gpio_to_irq(IMX_GPIO_NR(1, 12)), NULL);
@@ -262,6 +254,7 @@ static int __init stopwatch_init(void) {
 		return result;
 
 	init_timer(&(mydata.timer));
+	
 	fnd_addr = ioremap(PHY_FND, 0x4);
 
 	printk(KERN_ALERT "Init Module Success \n");
@@ -273,9 +266,9 @@ static int __init stopwatch_init(void) {
 static void __exit stopwatch_exit(void) {
 	stopwatch_usage=0;
 
-	del_timer_sync(&mydata.timer);
+	if(mydata.status == STATUS_SET)
+		del_timer(&mydata.timer);
 	iounmap(fnd_addr);
-
 	cdev_del(&stopwatch_cdev);
 	unregister_chrdev_region(stopwatch_dev, 1);
 

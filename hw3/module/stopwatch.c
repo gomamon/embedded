@@ -17,9 +17,12 @@
 #include <linux/version.h>
 #include <linux/cdev.h>
 
-#define MAJOR_NUM 242  
-#define DEVICE_DRIVER_NAME "stopwatch"
+#define MAJOR_NUM 242  //major number 
+#define DEVICE_DRIVER_NAME "stopwatch" 	//driver number
 #define PHY_FND 0x08000004
+
+#define STATUS_UNSET 0
+#define STATUS_SET 1
 
 static int stopwatch_major=MAJOR_NUM, stopwatch_minor=0;
 static int result;
@@ -27,36 +30,27 @@ static dev_t stopwatch_dev;
 static struct cdev stopwatch_cdev;
 unsigned char *fnd_addr;
 
+/* device deriver function */
 static int stopwatch_open(struct inode *, struct file *);
 static int stopwatch_release(struct inode *, struct file *);
 static int stopwatch_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos);
 
-irqreturn_t stopwatch_handler1(int irq, void* dev_id, struct pt_regs* reg);
-irqreturn_t stopwatch_handler2(int irq, void* dev_id, struct pt_regs* reg);
-irqreturn_t stopwatch_handler3(int irq, void* dev_id, struct pt_regs* reg);
-irqreturn_t stopwatch_handler4(int irq, void* dev_id, struct pt_regs* reg);
+/* interrupt handler*/
+irqreturn_t stopwatch_handler1(int irq, void* dev_id);
+irqreturn_t stopwatch_handler2(int irq, void* dev_id);
+irqreturn_t stopwatch_handler3(int irq, void* dev_id);
+irqreturn_t stopwatch_handler4(int irq, void* dev_id);
 
-#define STATUS_UNSET 0
-#define STATUS_SET 1
-#define STATUS_PUASE 2
-#define STATUS_RESET 3
-#define DECIMAL_SEC 10
 
-static struct timer_data{
-	int cnt;
-	int status;
-	struct timer_list timer;	//timer list struct
-} mydata;
+void timer_handler(unsigned long timeout);
+void fnd_write(int cnt);
+void timer_setup(int jiffies_gap);
 
-static int stopwatch_usage=0;
-int interruptCount=0;
 
-int vol_down_status = 0;
-static u64 vol_down_jiffies = 0;
+void exit_handler(unsigned long);
 
-wait_queue_head_t wq_write;
-DECLARE_WAIT_QUEUE_HEAD(wq_write);
 
+/* file operations related to stopwatch module */
 static struct file_operations stopwatch_fops =
 {
 	.open = stopwatch_open,
@@ -64,17 +58,36 @@ static struct file_operations stopwatch_fops =
 	.release = stopwatch_release,
 };
 
-/* timer */
-void timer_handler(unsigned long timeout);
-void fnd_write(int cnt);
-void timer_setup(void);
+
+/* timer data for stopwatch */
+static struct timer_data{
+	int cnt;					//timer count
+	int jiffies;				//last jiffies when timer function called
+	int status;					//status about timer set or unset
+	struct timer_list timer;	//timer list struct
+} mydata;
+
+int paused_jiffies =0;	//save jiffies when paused (back)
+
+/* exit */
+struct timer_list exit_timer;		// timer for exit(vol donw button). 
+int exit_status = STATUS_UNSET;		// exit_status is about that exit timer is set or not
+int vol_down_pressed = 0; 			// If vol down button pressed, this value is 1
+
+static int stopwatch_usage=0;		//usage counter
+int interruptCount=0;				//interrupt counter
 
 
+wait_queue_head_t wq_write;			//queue for wait
+DECLARE_WAIT_QUEUE_HEAD(wq_write);	
+
+
+/* write miniutes and time from cnt(timer count) to fpga fnd */
 void fnd_write(int cnt){
 	unsigned char fnd_str[4] = {0,};
 	unsigned short int fnd_value;
-	int s=(int)(cnt/DECIMAL_SEC)%60;
-	int m=((int)(cnt/DECIMAL_SEC)/60)%60;
+	int s=(int)(cnt)%60;
+	int m=(int)(cnt/60)%60;
 
 	sprintf(fnd_str, "%02d%02d",m,s);
 	printk("fnd_str: %s\n", fnd_str);
@@ -86,76 +99,110 @@ void fnd_write(int cnt){
 
 void timer_handler(unsigned long timeout){
 	struct timer_data *t_data = (struct timer_data*)timeout;
-	printk("time %d \n", t_data->cnt);
 	(t_data->cnt)++;
-	(t_data->cnt)%(60*60*DECIMAL_SEC);
+	(t_data->cnt)%=(60*60);
 	fnd_write(t_data->cnt);
+	t_data->jiffies = get_jiffies_64();
+	paused_jiffies = 0;
 
-	mydata.timer.expires = get_jiffies_64() + HZ/DECIMAL_SEC;
-	mydata.timer.data = (unsigned long)&mydata;
-	mydata.timer.function = timer_handler;
-	add_timer(&mydata.timer);	
+	t_data->timer.expires = get_jiffies_64() + HZ;
+	t_data->timer.data = (unsigned long)&mydata;
+	t_data->timer.function = timer_handler;
+	add_timer(&(t_data->timer));	
 
 }
 
 
-void timer_setup(void){
-	
-	mydata.timer.expires = get_jiffies_64() + HZ/DECIMAL_SEC;
+void timer_setup(int jiffies_gap){
+	mydata.jiffies = get_jiffies_64();
+
+	mydata.timer.expires = get_jiffies_64() + (HZ-jiffies_gap);
 	mydata.timer.data = (unsigned long)&mydata;
 	mydata.timer.function = timer_handler;
-
+	
 	add_timer(&mydata.timer);
 	return;
 }
 
-void data_init(void){
+void exit_handler(unsigned long timeout){
+	del_timer(&exit_timer);
+	printk("exit handler!\n");
+	exit_status = STATUS_UNSET;
+	if(vol_down_pressed == 1){
+		__wake_up(&wq_write, 1, 1, NULL);
+		printk("wake up\n");
+	}
+	return;
+}
+
+void exit_timer_setup(void){
+	if(exit_status == STATUS_SET){
+		del_timer(&exit_timer);
+	}
+	
+	printk("exit setup!\n");
+	exit_timer.expires = get_jiffies_64()+ 3*HZ;
+	exit_timer.function = exit_handler;
+
+	exit_status = STATUS_SET;
+	add_timer(&exit_timer);
+	return;
+}
+
+void data_clear(void){
 	if(mydata.status == STATUS_SET)
 		del_timer(&mydata.timer);
 	mydata.status = STATUS_UNSET;
+	mydata.jiffies = 0;
 	mydata.cnt = 0;
+	paused_jiffies = 0 ;
+
 	fnd_write(mydata.cnt);
+	return;
 }
 
-irqreturn_t stopwatch_handler1(int irq, void* dev_id, struct pt_regs* reg) {
+irqreturn_t stopwatch_handler1(int irq, void* dev_id) {
 	printk(KERN_ALERT "HOME! = %x\n", gpio_get_value(IMX_GPIO_NR(1, 11)));
 	if(mydata.status == STATUS_UNSET){
-		timer_setup();
+		if(paused_jiffies == 0 || mydata.jiffies ==0 )
+			timer_setup(0);
+		else{
+			timer_setup( paused_jiffies - mydata.jiffies);
+		}
 	}
+	paused_jiffies = 0;
 	mydata.status = STATUS_SET;
 	return IRQ_HANDLED;
 }
 
-irqreturn_t stopwatch_handler2(int irq, void* dev_id, struct pt_regs* reg) {
+irqreturn_t stopwatch_handler2(int irq, void* dev_id) {
 	printk(KERN_ALERT "BACK! = %x\n", gpio_get_value(IMX_GPIO_NR(1, 12)));
 	
+	if(paused_jiffies == 0 || mydata.jiffies!=0)
+		paused_jiffies = get_jiffies_64();
 	if(mydata.status == STATUS_SET)
 		del_timer(&mydata.timer);
 	mydata.status = STATUS_UNSET;
-
+	
 	return IRQ_HANDLED;
 }
 
-irqreturn_t stopwatch_handler3(int irq, void* dev_id,struct pt_regs* reg) {
+irqreturn_t stopwatch_handler3(int irq, void* dev_id) {
 	printk(KERN_ALERT "VOL UP! = %x\n", gpio_get_value(IMX_GPIO_NR(2, 15)));
 
-	data_init();
+	data_clear();
 	return IRQ_HANDLED;
 }
 
-irqreturn_t stopwatch_handler4(int irq, void* dev_id, struct pt_regs* reg) {
+irqreturn_t stopwatch_handler4(int irq, void* dev_id) {
 	printk(KERN_ALERT "VOL DOWN! = %x\n", gpio_get_value(IMX_GPIO_NR(5, 14)));
 	
-	if(vol_down_status == 0){
-		vol_down_jiffies = get_jiffies_64();
-		vol_down_status = 1;
+	if(vol_down_pressed == 0){
+		exit_timer_setup();
+		vol_down_pressed = 1;
 	}else{
-		if( get_jiffies_64()-vol_down_jiffies >= 3*HZ){
-			__wake_up(&wq_write, 1, 1, NULL);
-			printk("wake up\n");
-		}
+		vol_down_pressed = 0;
 	}
-
 	return IRQ_HANDLED;
 }
 
@@ -170,7 +217,7 @@ static int stopwatch_open(struct inode *minode, struct file *mfile){
 	gpio_direction_input(IMX_GPIO_NR(1,11));
 	irq = gpio_to_irq(IMX_GPIO_NR(1,11));
 	printk(KERN_ALERT "IRQ Number : %d\n",irq);
-	ret=request_irq(irq, stopwatch_handler1, IRQF_TRIGGER_FALLING, "home", 0);
+	ret = request_irq(irq, stopwatch_handler1, IRQF_TRIGGER_FALLING, "home", 0);
 
 	gpio_direction_input(IMX_GPIO_NR(1,12));
 	irq = gpio_to_irq(IMX_GPIO_NR(1,12));
@@ -187,6 +234,7 @@ static int stopwatch_open(struct inode *minode, struct file *mfile){
 	printk(KERN_ALERT "IRQ Number : %d\n",irq);
 	ret=request_irq(irq, stopwatch_handler4, IRQF_TRIGGER_FALLING| IRQF_TRIGGER_RISING, "voldown", 0);
 	
+	exit_status= STATUS_UNSET;
 	stopwatch_usage = 1;
 
 	return 0;
@@ -194,7 +242,7 @@ static int stopwatch_open(struct inode *minode, struct file *mfile){
 
 static int stopwatch_release(struct inode *minode, struct file *mfile){
 
-	data_init();
+	data_clear();
 
 	free_irq(gpio_to_irq(IMX_GPIO_NR(1, 11)), NULL);
 	free_irq(gpio_to_irq(IMX_GPIO_NR(1, 12)), NULL);
@@ -224,14 +272,14 @@ static int stopwatch_register_cdev(void)
 
 	if(stopwatch_major) {
 		stopwatch_dev = MKDEV(MAJOR_NUM, 0);
-		error = register_chrdev_region(stopwatch_dev, 1,"inter");
+		error = register_chrdev_region(stopwatch_dev, 1,"stopwatch");
 	}
 	else{
-		error = alloc_chrdev_region(&stopwatch_dev,stopwatch_minor,1,"inter");
+		error = alloc_chrdev_region(&stopwatch_dev,stopwatch_minor,1,"stopwatch");
 		stopwatch_major = MAJOR(stopwatch_dev);
 	}
 	if(error<0) {
-		printk(KERN_WARNING "inter: can't get major %d\n", stopwatch_major);
+		printk(KERN_WARNING "stopwatch: can't get major %d\n", stopwatch_major);
 		return result;
 	}
 	
@@ -249,13 +297,14 @@ static int stopwatch_register_cdev(void)
 }
 
 static int __init stopwatch_init(void) {
+	/* initialize module */
 	int result;
-	if((result = stopwatch_register_cdev()) < 0 )
+	if((result = stopwatch_register_cdev()) < 0 )	//register stopwatch device
 		return result;
 
-	init_timer(&(mydata.timer));
-	
-	fnd_addr = ioremap(PHY_FND, 0x4);
+	init_timer(&(mydata.timer));			//
+	init_timer(&exit_timer);				//
+	fnd_addr = ioremap(PHY_FND, 0x4);		//
 
 	printk(KERN_ALERT "Init Module Success \n");
 	printk(KERN_ALERT "Device : /dev/%s, Major Num : %d \n",DEVICE_DRIVER_NAME ,MAJOR_NUM );
@@ -264,13 +313,19 @@ static int __init stopwatch_init(void) {
 
 
 static void __exit stopwatch_exit(void) {
+	/*exit module*/
+	
 	stopwatch_usage=0;
 
-	if(mydata.status == STATUS_SET)
+	if(exit_status == STATUS_SET){		//delete exit timer
+		del_timer(&exit_timer);
+	}
+	if(mydata.status == STATUS_SET){	//delete timer for stopwatch
 		del_timer(&mydata.timer);
-	iounmap(fnd_addr);
-	cdev_del(&stopwatch_cdev);
-	unregister_chrdev_region(stopwatch_dev, 1);
+	}
+	iounmap(fnd_addr);		//iounmap fnd address
+	cdev_del(&stopwatch_cdev);		//delete character device
+	unregister_chrdev_region(stopwatch_dev, 1);		//unregister device
 
 	printk(KERN_ALERT "Remove Module Success \n");
 }

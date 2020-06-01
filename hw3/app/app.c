@@ -3,22 +3,20 @@
 #include <stdlib.h>
 #include <fcntl.h>
 
-#define MAJOR_NUM 242
-
 int main(void){
-	int fd;
-	int retn;
+	int fd, val;
 	char buf[2] = {0,};
 
-	fd = open("/dev/stopwatch", O_RDWR);
+	fd = open("/dev/stopwatch", O_RDWR);	// open stopwatch device
 	if(fd < 0) {
-		perror("/dev/stopwatch error");
+		perror("ERROR : open /dev/stopwatch");
 		exit(-1);
 	}
-    else { printf("< inter Device has been detected > \n"); }
+    else 
+		printf("Success! detect stopwatch device\n"); 
 	
-	retn = write(fd, buf, 2);
-	close(fd);
+	val = write(fd, buf, 2);	// write to device file
+	close(fd);					// release
 
 	return 0;
 }

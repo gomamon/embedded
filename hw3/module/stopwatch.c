@@ -1,21 +1,24 @@
+#include <linux/ioctl.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
-#include <linux/interrupt.h>
-#include <asm/irq.h>
-#include <mach/gpio.h>
-#include <linux/platform_device.h>
-#include <asm/gpio.h>
-#include <linux/wait.h>
 #include <linux/fs.h>
+#include <linux/interrupt.h>
+#include <linux/platform_device.h>
+#include <linux/wait.h>
 #include <linux/init.h>
-#include <asm/io.h>
 #include <linux/uaccess.h>
-#include <asm/uaccess.h>
-#include <asm/ioctl.h>
-#include <linux/ioctl.h>
+
 #include <linux/ioport.h>
 #include <linux/version.h>
 #include <linux/cdev.h>
+
+#include <asm/io.h>
+#include <asm/uaccess.h>
+#include <asm/ioctl.h>
+#include <asm/irq.h>
+#include <asm/gpio.h>
+
+#include <mach/gpio.h>
 
 #define MAJOR_NUM 242  //major number 
 #define DEVICE_DRIVER_NAME "stopwatch" 	//driver number
@@ -94,7 +97,7 @@ void fnd_write(int cnt){
 	int m=(int)(cnt/60)%60;	//cnt to minutes
 
 	sprintf(fnd_str, "%02d%02d",m,s);	//get string formatted from 'mmss'
-	printk("stopwatch : %s\n", fnd_str);	
+	printk("fnd : %s\n", fnd_str);	
 
 	/*fpga write*/
 	fnd_value = ((fnd_str[0]-'0')<<12 | (fnd_str[1]-'0')<<8 | (fnd_str[2]-'0')<<4 | (fnd_str[3]-'0') );	
@@ -276,7 +279,8 @@ static int stopwatch_open(struct inode *minode, struct file *mfile){
 	irq = gpio_to_irq(IMX_GPIO_NR(5,14));
 	ret=request_irq(irq, stopwatch_voldown_handler, IRQF_TRIGGER_FALLING| IRQF_TRIGGER_RISING, "voldown", 0);
 	
-
+	data_clear();
+	vol_down_pressed = 0; 		
 	exit_status= STATUS_UNSET;
 	stopwatch_usage = 1;
 
@@ -302,7 +306,7 @@ static int stopwatch_release(struct inode *minode, struct file *mfile){
 
 static int stopwatch_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos ){
 	/*write stopwatch*/
-	
+
 	printk("WRITE\n");
 
 	if(interruptCount==0){

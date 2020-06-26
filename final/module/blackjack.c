@@ -23,6 +23,7 @@
 
 #define MAJOR_NUM 242  //major number 
 #define DEVICE_DRIVER_NAME "blackjack" 	//driver number
+#define CARD_NUM 52
 
 /* fpga physical address */
 #define PHY_LED 0x08000016
@@ -30,8 +31,13 @@
 #define PHY_DOT 0x08000210
 #define PHY_TEXT_LCD 0x08000090
 
-#define STATUS_UNSET 0
-#define STATUS_SET 1
+#define DEALER 0
+#define PLAYER 1
+#define OFF 0
+#define ON 1
+#define LOSE 0
+#define PAIR 1
+#define WIN 2
 
 /* device */
 static int blackjack_major=MAJOR_NUM, blackjack_minor=0;
@@ -58,6 +64,14 @@ unsigned char *text_lcd_addr;
 
 void fnd_write(int cnt);
 
+void iounmap_fpga(void);
+void iomap_fpga(void);
+
+static void init_card(void);
+static void start_game(void);
+static void add_card(int picker);
+
+
 /* file operations related to blackjack module */
 static struct file_operations blackjack_fops =
 {
@@ -67,6 +81,22 @@ static struct file_operations blackjack_fops =
 };
 
 
+int cards[CARD_NUM] = {
+	1,2,3,4,5,6,7,8,9,10,10,10,10,
+	1,2,3,4,5,6,7,8,9,10,10,10,10,
+	1,2,3,4,5,6,7,8,9,10,10,10,10,
+	1,2,3,4,5,6,7,8,9,10,10,10,10
+};
+
+int cards_visit[CARD_NUM] = { 0, };
+int on_game = 0;
+
+static struct  gamer{
+	int cards[12];
+	int point;
+	int idx;
+	int money;
+} dealer, player;
 
 static int blackjack_usage=0;		//usage counter
 int interruptCount=0;				//interrupt counter
@@ -76,13 +106,16 @@ wait_queue_head_t wq_write;			//queue for wait
 DECLARE_WAIT_QUEUE_HEAD(wq_write);	
 
 
+static void end_game(void);
+
+
 void fnd_write(int n){
 	/* write miniutes and time from cnt(timer count) to fpga fnd */
 
 	unsigned char fnd_str[4] = {0,};
 	unsigned short int fnd_value;
 
-	sprintf(fnd_str, "%02d%02d",n);	
+	sprintf(fnd_str, "%04d",n);	
 
 	/*fpga write*/
 	fnd_value = ((fnd_str[0]-'0')<<12 | (fnd_str[1]-'0')<<8 | (fnd_str[2]-'0')<<4 | (fnd_str[3]-'0') );	
@@ -95,6 +128,10 @@ void fnd_write(int n){
 irqreturn_t blackjack_home_handler(int irq, void* dev_id) {
 	/* home button intterupt */
 	printk(KERN_ALERT "INTERRUPT - HOME! : %x\n", gpio_get_value(IMX_GPIO_NR(1, 11)));
+
+	if(on_game == OFF){
+		start_game();
+	}
 
 	return IRQ_HANDLED;
 }
@@ -111,22 +148,113 @@ irqreturn_t blackjack_back_handler(int irq, void* dev_id) {
 }
 
 irqreturn_t blackjack_volup_handler(int irq, void* dev_id) {
-	/* vol+ button intterupt */
-
+	/* vol+ button intterupt - HIT */
 	printk(KERN_ALERT "INTERRUPT - VOL UP! : %x\n", gpio_get_value(IMX_GPIO_NR(2, 15)));
+
+	if(on_game == ON){
+		add_card(PLAYER);
+	}
 
 	return IRQ_HANDLED;
 }
 
 irqreturn_t blackjack_voldown_handler(int irq, void* dev_id) {
-	/* vol- button intterupt */
-
+	/* vol- button intterupt - STAY*/
 	printk(KERN_ALERT "INTERRUPT - VOL DOWN! : %x\n", gpio_get_value(IMX_GPIO_NR(5, 14)));
 	
+	if(on_game == ON){
+		end_game();
+	}
+
 	return IRQ_HANDLED;
 }
 
 
+static void init_card(){
+	int i;
+	for(i=0; i<CARD_NUM; i++){
+		cards_visit[i] = 0;
+	}
+
+	for(i=0; i<12; i++){
+		dealer.cards[i] = 0;
+		player.cards[i] = 0;
+	}
+
+	dealer.point = 0;
+	player.point = 0;
+
+	dealer.idx = 0;
+	player.idx = 0;
+
+	return;
+}
+
+
+static void add_card(int picker){
+	int card;
+	while(1){
+		get_random_bytes(&card, sizeof(card));
+		if(card < 0) card *= (-1);
+		card %= 52;
+		if(cards_visit[card] == 0) break;	
+	}
+	cards_visit[card] = 1;
+
+	if(picker == PLAYER){
+		player.cards[(player.idx)++] = cards[card]; 
+		player.point += cards[card];
+	}
+	else{
+		dealer.cards[(dealer.idx)++] = cards[card]; 
+		dealer.point += cards[card];
+	}
+
+	return;
+}
+
+static void start_game(void){
+	init_card();
+
+	add_card(PLAYER);
+	add_card(PLAYER);
+	add_card(DEALER);
+	add_card(DEALER);
+
+
+	if(player.point == 21){
+		player.money += 200;
+		dealer.money -= 200;
+	}
+
+	return;
+}
+
+static int get_result(void){
+	if( player.point == dealer.point ) return PAIR;
+	else if(player.point > dealer.point){
+		player.money += 100;
+		dealer.money -= 100;
+		return WIN;
+	}
+	else{ 
+		player.money -= 100;
+		dealer.money += 100;
+		return LOSE;
+	}
+}
+
+
+static void end_game(void){
+	int result;
+	while(1){
+		if(dealer.point >= 17) break;
+		add_card(DEALER);
+	}
+
+	result = get_result();
+	on_game = OFF;
+}
 
 
 static int blackjack_open(struct inode *minode, struct file *mfile){

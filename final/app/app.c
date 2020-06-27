@@ -8,10 +8,10 @@ int main(void){
 	int fd, val;
 	char buf[2] = {0,};
 
-	fd = open("/dev/stopwatch", O_RDWR);	// open stopwatch device
+	fd = open("/dev/blackjack", O_RDWR);	// open stopwatch device
 
 	if(fd < 0) {
-		perror("ERROR : open /dev/stopwatch");
+		perror("ERROR : open /dev/blackjack");
 		exit(-1);
 	}
 	

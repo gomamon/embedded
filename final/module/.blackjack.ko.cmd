@@ -1,0 +1,1 @@
+cmd_/home/embe/embedded/final/module/blackjack.ko := arm-none-linux-gnueabi-ld -EL -r  -T /work/achroimx_kernel/scripts/module-common.lds --build-id  -o /home/embe/embedded/final/module/blackjack.ko /home/embe/embedded/final/module/blackjack.o /home/embe/embedded/final/module/blackjack.mod.o

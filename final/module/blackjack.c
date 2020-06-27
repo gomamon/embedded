@@ -49,7 +49,7 @@
 #define FILL 6
 #define CLEAR 7
 
-unsigned char fpga_number[7][10] = {
+unsigned char fpga_number[8][10] = {
 	{0x00,0x00,0x20,0x20,0x20,0x20,0x20,0x20,0x3e,0x00}, // L
 	{0x00,0x00,0x3c,0x22,0x22,0x3c,0x20,0x20,0x20,0x00}, // P
 	{0x00,0x00,0x41,0x41,0x49,0x49,0x6b,0x36,0x00,0x00}, // W
@@ -70,6 +70,7 @@ static struct cdev blackjack_cdev;
 static int blackjack_open(struct inode *, struct file *);
 static int blackjack_release(struct inode *, struct file *);
 static int blackjack_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos);
+static int blackjack_read(struct file *filp, const char *buf, size_t count, loff_t *f_pos);
 
 /* interrupt handler */
 irqreturn_t blackjack_home_handler(int irq, void* dev_id);
@@ -96,7 +97,6 @@ static void init_card(void);
 static void start_game(void);
 static void add_card(int picker);
 static void start_betting(void);
-static void end_betting(void);
 
 static int onbetting = ON;
 
@@ -107,6 +107,7 @@ static struct file_operations blackjack_fops =
 	.open = blackjack_open,
 	.write = blackjack_write,
 	.release = blackjack_release,
+	.read = blackjack_read
 };
 
 
@@ -120,7 +121,7 @@ int cards[CARD_NUM] = {
 int cards_visit[CARD_NUM] = { 0, };
 int on_game = OFF;
 
-static struct  gamer{
+struct  gamer{
 	int cards[12];
 	int point;
 	int idx;
@@ -168,7 +169,9 @@ void text_lcd_write(){
 	for(i=0; i<32; i++)	text_lcd_data[i] = ' ';
 	for(i=0; i< 16; i++){
 		text_lcd_data[i]=text1[i];
+		if(text1[i] == '\0') text_lcd_data[i] = ' ';
 		text_lcd_data[16+i] = text2[i];
+		if(text2[i] == '\0') text_lcd_data[16+i] = ' ';
 	}
 
 	for(i=0;i<32;i++)
@@ -184,8 +187,6 @@ void text_lcd_write(){
 
 irqreturn_t blackjack_home_handler(int irq, void* dev_id) {
 	/* home button intterupt */
-	printk(KERN_ALERT "INTERRUPT - HOME! : %x\n", gpio_get_value(IMX_GPIO_NR(1, 11)));
-	printk("on game %d\n",on_game);
 
 	if(onbetting == OFF){
 		onbetting = ON;
@@ -202,11 +203,8 @@ irqreturn_t blackjack_home_handler(int irq, void* dev_id) {
 
 irqreturn_t blackjack_back_handler(int irq, void* dev_id) {
 	/* back button intterupt */
-
-	printk(KERN_ALERT "INTERRUPT - BACK! : %x\n", gpio_get_value(IMX_GPIO_NR(1, 12)));
-	
+	dealer.point = -1;
 	__wake_up(&wq_write, 1, 1, NULL);
-	printk("wake up\n");
 	
 	return IRQ_HANDLED;
 }
@@ -214,14 +212,9 @@ irqreturn_t blackjack_back_handler(int irq, void* dev_id) {
 irqreturn_t blackjack_volup_handler(int irq, void* dev_id) {
 	int i;
 	/* vol+ button intterupt - HIT */
-	printk(KERN_ALERT "INTERRUPT - VOL UP! : %x\n", gpio_get_value(IMX_GPIO_NR(2, 15)));
-
 	if(on_game == ON){
 		add_card(PLAYER);
-
-		printk("cards : ");
 		for(i=0; i<player.idx ; i++){
-			printk("%d ",player.cards[i]);
 			if(i<7){
 				sprintf(&text1[i*2],"%02d",player.cards[i]);
 			}
@@ -237,12 +230,10 @@ irqreturn_t blackjack_volup_handler(int irq, void* dev_id) {
 
 irqreturn_t blackjack_voldown_handler(int irq, void* dev_id) {
 	/* vol- button intterupt - STAY*/
-	printk(KERN_ALERT "INTERRUPT - VOL DOWN! : %x\n", gpio_get_value(IMX_GPIO_NR(5, 14)));
-	
+
 	if(on_game == ON){
 		end_game();
 	}
-
 	return IRQ_HANDLED;
 }
 
@@ -275,7 +266,6 @@ static void init_card(){
 
 static void add_card(int picker){
 	int card;
-	printk("add_card!! ");
 
 	while(1){
 		get_random_bytes(&card, sizeof(card));
@@ -303,7 +293,7 @@ static void add_card(int picker){
 
 static void start_game(void){
 	int i=0;
-	printk("start game ");
+	printk("Start Game \n");
 	init_card();
 
 	add_card(PLAYER);
@@ -332,6 +322,7 @@ static void start_game(void){
 
 	on_game = ON;
 	text_lcd_write();
+	__wake_up(&wq_write, 1, 1, NULL);
 	return;
 }
 
@@ -388,6 +379,8 @@ static void end_game(void){
 		dot_write(result);
 		fnd_write(player.money);
 	}
+
+	__wake_up(&wq_write, 1, 1, NULL);
 }
 
 static void start_betting(void){
@@ -410,10 +403,8 @@ static void start_betting(void){
 	text_lcd_write();
 	onbetting = ON;
 	on_game = OFF;
-}
+	__wake_up(&wq_write, 1, 1, NULL);
 
-static void end_betting(void){
-	init_card();
 }
 
 static int blackjack_open(struct inode *minode, struct file *mfile){
@@ -445,7 +436,7 @@ static int blackjack_open(struct inode *minode, struct file *mfile){
 	irq = gpio_to_irq(IMX_GPIO_NR(5,14));
 	ret=request_irq(irq, blackjack_voldown_handler, IRQF_TRIGGER_FALLING, "voldown", 0);
 	
-	
+	start_betting();
 	blackjack_usage = 1;
 	return 0;
 }
@@ -478,16 +469,16 @@ static int blackjack_release(struct inode *minode, struct file *mfile){
 static int blackjack_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos ){
 	/*write blackjack*/
 
-	printk("WRITE\n");
-
 	if(interruptCount==0){
-		printk("sleep\n");
-		start_betting();
 		interruptible_sleep_on(&wq_write);
 	}
 	return 0;
 }
 
+
+static int blackjack_read(struct file *filp, const char *buf, size_t count, loff_t *f_pos ){
+	copy_to_user(buf, &dealer, count);
+}
 
 static int blackjack_register_cdev(void)
 {

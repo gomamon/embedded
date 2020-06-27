@@ -99,6 +99,7 @@ static void add_card(int picker);
 static void start_betting(void);
 
 static int onbetting = ON;
+int checksleep = 0;
 
 
 /* file operations related to blackjack module */
@@ -204,7 +205,11 @@ irqreturn_t blackjack_home_handler(int irq, void* dev_id) {
 irqreturn_t blackjack_back_handler(int irq, void* dev_id) {
 	/* back button intterupt */
 	dealer.point = -1;
-	__wake_up(&wq_write, 1, 1, NULL);
+	printk("interrupt counter : %d\n",interruptCount);
+	if(interruptCount == 1){
+		interruptCount = 0;
+		__wake_up(&wq_write, 1, 1, NULL);
+	}
 	
 	return IRQ_HANDLED;
 }
@@ -322,7 +327,11 @@ static void start_game(void){
 
 	on_game = ON;
 	text_lcd_write();
-	__wake_up(&wq_write, 1, 1, NULL);
+	printk("interrupt counter : %d\n",interruptCount);
+	if(interruptCount == 1){
+		interruptCount = 0;
+		__wake_up(&wq_write, 1, 1, NULL);
+	}
 	return;
 }
 
@@ -379,8 +388,11 @@ static void end_game(void){
 		dot_write(result);
 		fnd_write(player.money);
 	}
-
-	__wake_up(&wq_write, 1, 1, NULL);
+	printk("interrupt counter : %d\n",interruptCount);
+	if(interruptCount == 1){
+		interruptCount = 0;
+		__wake_up(&wq_write, 1, 1, NULL);
+	}
 }
 
 static void start_betting(void){
@@ -403,7 +415,12 @@ static void start_betting(void){
 	text_lcd_write();
 	onbetting = ON;
 	on_game = OFF;
-	__wake_up(&wq_write, 1, 1, NULL);
+
+	printk("cnt : %d", interruptCount);
+	if(interruptCount == 1){
+		interruptCount = 0;
+		__wake_up(&wq_write, 1, 1, NULL);
+	}
 
 }
 
@@ -437,6 +454,8 @@ static int blackjack_open(struct inode *minode, struct file *mfile){
 	ret=request_irq(irq, blackjack_voldown_handler, IRQF_TRIGGER_FALLING, "voldown", 0);
 	
 	start_betting();
+	
+	interruptCount = 0;
 	blackjack_usage = 1;
 	return 0;
 }
@@ -469,9 +488,13 @@ static int blackjack_release(struct inode *minode, struct file *mfile){
 static int blackjack_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos ){
 	/*write blackjack*/
 
-	if(interruptCount==0){
+	
+	printk("cnt : %d \n", interruptCount);
+	//if(interruptCount==0){
+		printk("sleep!\n");
+		interruptCount = 1;
 		interruptible_sleep_on(&wq_write);
-	}
+	//}
 	return 0;
 }
 

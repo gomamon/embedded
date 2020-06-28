@@ -289,9 +289,11 @@ static void init_card(){
 
 
 static void add_card(int picker){
+	/* picker pick the card*/
 	int card;
 
 	while(1){
+		/* get unique random card*/
 		get_random_bytes(&card, sizeof(card));
 		if(card < 0) card *= (-1);
 		card %= 52;
@@ -299,6 +301,7 @@ static void add_card(int picker){
 	}
 	cards_visit[card] = 1;
 
+	/* player/dealer pick*/
 	if(picker == PLAYER){
 		player.cards[player.idx] = cards[card]; 
 		player.point += cards[card];
@@ -316,11 +319,12 @@ static void add_card(int picker){
 }
 
 static void start_game(void){
-	//stat game
+	/*stat game */
 	int i=0;
 	printk("Start Game \n");
 	init_card();
 
+	/* pick each gamer 2 card */
 	add_card(PLAYER);
 	add_card(PLAYER);
 	add_card(DEALER);
@@ -333,21 +337,22 @@ static void start_game(void){
 	}
 	else	dot_write(4);
 	
+	/* player cards list to string */
 	for(i=0; i<17 ; i++){
 		text1[i] = ' ';
 		text2[i] = ' ';
 	}
-
 	for(i=0; i<player.idx ; i++){
 		if(i<7)	sprintf(&text1[i*2],"%02d",player.cards[i]);
 		else	sprintf(&text2[(i%7)*2],"%02d",player.cards[i]);	
 	}
 
+	/* print data */
 	dealer.status = STATUS_PLAYING;
 	on_game = ON;
 	text_lcd_write();
-	printk("interrupt counter : %d\n",interruptCount);
-
+	
+	/* wake up to read data from kernel to user */
 	interruptCount = 0;
 	__wake_up(&wq_write, 1, 1, NULL);
 

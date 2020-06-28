@@ -35,11 +35,15 @@
 #define PHY_DOT 0x08000210
 #define PHY_TEXT_LCD 0x08000090
 
+/* GAMER FLAG */
 #define DEALER 0
 #define PLAYER 1
+
+/* ON/ OFF*/
 #define OFF 0
 #define ON 1
 
+/* number for dot matrix */
 #define LOSE 0
 #define PAIR 1
 #define WIN 2
@@ -49,7 +53,7 @@
 #define FILL 6
 #define CLEAR 7
 
-
+/* GAME STATUS */
 #define STATUS_WAIT 0
 #define STATUS_PLAYING 1
 #define STATUS_WIN 2
@@ -120,19 +124,19 @@ static struct file_operations blackjack_fops =
 	.release = blackjack_release
 };
 
-
+/* cards */
 int cards[CARD_NUM] = {
 	1,2,3,4,5,6,7,8,9,10,10,10,10,
 	1,2,3,4,5,6,7,8,9,10,10,10,10,
 	1,2,3,4,5,6,7,8,9,10,10,10,10,
 	1,2,3,4,5,6,7,8,9,10,10,10,10
 };
-
+/* array to check card are picked */
 int cards_visit[CARD_NUM] = { 0, };
 int on_game = OFF;
 
 
-
+/* struct to save gamer's data */
 struct  gamer{
 	int status;
 	int cards[12];
@@ -152,7 +156,7 @@ static void end_game(void);
 
 
 void fnd_write(int n){
-	/* write miniutes and time from cnt(timer count) to fpga fnd */
+	/* print player's money to fnd */
 
 	unsigned char fnd_str[4] = {0,};
 	unsigned short int fnd_value;
@@ -165,6 +169,7 @@ void fnd_write(int n){
 }
 
 void dot_write(int n){
+	/* print game state to dot_write */
 	int i;
 	unsigned short int dot_value;
 	for(i=0; i<10; i++){
@@ -177,6 +182,8 @@ void text_lcd_write(){
 	int i;
 	unsigned short int text_lcd_value = 0;
 	unsigned char text_lcd_data[33];
+
+	/* print player's card to text_lcd*/
 
 	for(i=0; i<32; i++)	text_lcd_data[i] = ' ';
 
@@ -200,7 +207,7 @@ void text_lcd_write(){
 
 irqreturn_t blackjack_home_handler(int irq, void* dev_id) {
 	/* home button intterupt */
-
+	printk("obetting : %d, on_game : %d", onbetting, on_game ); 
 	if(onbetting == OFF){
 		onbetting = ON;
 		start_betting();
@@ -254,6 +261,8 @@ irqreturn_t blackjack_voldown_handler(int irq, void* dev_id) {
 
 
 static void init_card(){
+
+	/* init all data related to card */
 	int i;
 	for(i=0; i<CARD_NUM; i++){
 		cards_visit[i] = 0;
@@ -307,6 +316,7 @@ static void add_card(int picker){
 }
 
 static void start_game(void){
+	//stat game
 	int i=0;
 	printk("Start Game \n");
 	init_card();
@@ -337,42 +347,43 @@ static void start_game(void){
 	on_game = ON;
 	text_lcd_write();
 	printk("interrupt counter : %d\n",interruptCount);
-//	if(interruptCount == 1){
-		interruptCount = 0;
-		__wake_up(&wq_write, 1, 1, NULL);
-//	}
+
+	interruptCount = 0;
+	__wake_up(&wq_write, 1, 1, NULL);
+
 	return;
 }
 
 static int get_result(void){
+	/* Get result of the game */
 
-	if(player.point == 21){
+	if(player.point == 21){	//black jack
 		player.money += 200;
 		dealer.money -= 200;
 		
 		dealer.status = STATUS_BLACKJACK;
 		return BLACKJACK;
 	}
-	else if(player.point > 21){
+	else if(player.point > 21){	//lost because of bust
 		player.money -= 200;
 		dealer.money += 200;
 		dealer.status = STATUS_BUST;
 		return LOSE;
 	}
-	else if(dealer.point > 21){
+	else if(dealer.point > 21){	// win because of dealer's bust
 		player.money += 100;
 		dealer.money -= 100;
 		dealer.status = STATUS_WIN;
 		return WIN;
 	}
-	else if( player.point == dealer.point ) return PAIR;
-	else if(player.point > dealer.point){
+	else if( player.point == dealer.point ) return PAIR;	//pair
+	else if(player.point > dealer.point){	//win
 		player.money += 100;
 		dealer.money -= 100;
 		dealer.status = STATUS_WIN;
 		return WIN;
 	}
-	else{ 
+	else{ 	//lose
 		player.money -= 100;
 		dealer.money += 100;
 		dealer.status = STATUS_LOSE;
@@ -386,12 +397,14 @@ static void end_game(void){
 	onbetting = ON;
 	on_game = OFF;
 
+	/* get dealer's cards to get data */
 	while(1){
 		if(dealer.point >= 17) break;
 		add_card(DEALER);
-	}
+	} 
+	
+	/* get result and print result data */
 	result = get_result();
-
 
 	if(player.money <= 0){
 		dot_write(END);
@@ -405,16 +418,20 @@ static void end_game(void){
 	}
 
 	interruptCount = 0;
+
+	/*wake up process*/
 	__wake_up(&wq_write, 1, 1, NULL);
 
 
 }
 
 static void start_betting(void){
+	/* start betting before starting game */
 	unsigned char greeting1[17] = "Please push HOME";
 	unsigned char greeting2[17] = "to start game.";
 	int i;
 
+	/* initiaizing data*/
 	init_card();
 
 	dealer.status = STATUS_WAIT;
@@ -426,14 +443,16 @@ static void start_betting(void){
 		text2[i] = greeting2[i];
 	}
 	
+	/*print initial data to fpga device*/
 	fnd_write(dealer.money);
 	dot_write(FILL);
 	text_lcd_write();
+
 	onbetting = ON;
 	on_game = OFF;
-
-
 	interruptCount = 0;
+
+	/*wake to pass data to user*/
 	__wake_up(&wq_write, 1, 1, NULL);
 
 
@@ -472,6 +491,7 @@ static int blackjack_open(struct inode *minode, struct file *mfile){
 	
 	onbetting = ON;
 	checksleep = 0;
+	on_game = 0;
 	blackjack_usage = 1;
 	return 0;
 }
@@ -502,21 +522,16 @@ static int blackjack_release(struct inode *minode, struct file *mfile){
 }
 
 static int blackjack_write(struct file *filp, const char *buf, size_t count, loff_t *f_pos ){
-	/*write blackjack*/
-
-	
-	printk("cnt : %d \n", interruptCount);
-	//if(interruptCount==0){
-		printk("sleep!\n");
-		interruptCount = 1;
-		interruptible_sleep_on(&wq_write);
-	//}
+	/* write blackjack, user process sleep*/
+	interruptCount = 1;
+	interruptible_sleep_on(&wq_write);
 	return 0;
 }
 
 
 static int blackjack_read(struct file *filp, const char *buf, size_t count, loff_t *f_pos ){
-	copy_to_user(buf, &dealer, count);
+	/* pass dealer struct from kernel to user */
+	copy_to_user(buf, &dealer, count);	
 }
 
 static int blackjack_register_cdev(void)
@@ -561,6 +576,7 @@ void iomap_fpga(){
 }
 
 void iounmap_fpga(){
+	/*free kernel virtual address mapped with the physical address space of fpga*/
 	iounmap(led_addr);
 	iounmap(fnd_addr);
 	iounmap(dot_addr);

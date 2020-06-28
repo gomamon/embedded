@@ -4,6 +4,7 @@
 #include <fcntl.h>
 
 struct  gamer{
+	int status;
 	int cards[12];
 	int point;
 	int idx;
@@ -27,7 +28,6 @@ int main(void){
 		if(dealer.point<0) break;
 		printf("------<dealer>----- \n point: %d\n money : %d\n", dealer.point, dealer.money);
 		printf("--------------------\n");
-		if(dealer.point<0) break;
 	}
 	close(fd);					// release
 	return 0;
